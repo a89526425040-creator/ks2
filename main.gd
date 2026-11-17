@@ -267,7 +267,7 @@ func _update_weapon(delta: float) -> void:
 	if reload_clock > 0:
 		reload_clock -= delta
 		if reload_clock <= 0:
-			var need := magazine_sizes[weapon]-ammo
+			var need: int = magazine_sizes[weapon] - ammo
 			var take := mini(need,reserve_ammo)
 			ammo += take
 			reserve_ammo -= take
