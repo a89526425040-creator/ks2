@@ -256,7 +256,9 @@ func _get_weapon_bounds(node: Node, parent_transform: Transform3D = Transform3D.
 	var result := AABB()
 	var found := false
 	for child in node.get_children():
-		var child_transform: Transform3D = parent_transform * child.transform
+		var child_transform: Transform3D = parent_transform
+		if child is Node3D:
+			child_transform = parent_transform * (child as Node3D).transform
 		if child is MeshInstance3D and child.mesh != null:
 			var child_bounds: AABB = child.get_aabb() * child_transform
 			if not found:
