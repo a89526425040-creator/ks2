@@ -1,0 +1,43 @@
+name: Build KS2 Windows
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.4.1 and export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="4.4.1"
+          mkdir -p "$HOME/.local/share/godot/export_templates/\${VERSION}.stable"
+          wget -q "https://github.com/godotengine/godot/releases/download/\${VERSION}-stable/Godot_v\${VERSION}-stable_linux.x86_64.zip" -O godot.zip
+          unzip -q godot.zip -d godot-bin
+          sudo install -m 0755 godot-bin/Godot_v\${VERSION}-stable_linux.x86_64 /usr/local/bin/godot
+          wget -q "https://github.com/godotengine/godot/releases/download/\${VERSION}-stable/Godot_v\${VERSION}-stable_export_templates.tpz" -O templates.tpz
+          unzip -q templates.tpz -d templates
+          cp -a templates/templates/. "$HOME/.local/share/godot/export_templates/\${VERSION}.stable/"
+          godot --version
+      - name: Validate and export project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          godot --headless --path . --editor --quit
+          godot --headless --path . --export-release "Windows Desktop" build/KS2.exe
+          test -s build/KS2.exe
+      - name: Package Windows build
+        run: |
+          cd build
+          zip -9 KS2-Windows.zip KS2.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KS2-Windows
+          path: build/KS2-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
