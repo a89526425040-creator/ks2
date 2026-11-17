@@ -35,6 +35,10 @@ var mouse_captured := false
 var player_speed := 7.2
 var player_velocity := Vector3.ZERO
 var weapon_view: Node3D
+var weapon_magazine: MeshInstance3D
+var weapon_bolt: MeshInstance3D
+var reload_elapsed := 0.0
+var reload_duration := 1.8
 var muzzle_flash: MeshInstance3D
 var muzzle_clock := 0.0
 var weapon_recoil := 0.0
@@ -179,6 +183,20 @@ func _add_weapon_model() -> void:
 	grip.position = Vector3(0,-0.17,-0.12)
 	grip.material_override = mat
 	weapon_root.add_child(grip)
+	weapon_magazine = MeshInstance3D.new()
+	var magazine_mesh := BoxMesh.new()
+	magazine_mesh.size = Vector3(0.11, 0.24, 0.16)
+	weapon_magazine.mesh = magazine_mesh
+	weapon_magazine.position = Vector3(0, -0.18, -0.12)
+	weapon_magazine.material_override = mat
+	weapon_root.add_child(weapon_magazine)
+	weapon_bolt = MeshInstance3D.new()
+	var bolt_mesh := BoxMesh.new()
+	bolt_mesh.size = Vector3(0.055, 0.045, 0.22)
+	weapon_bolt.mesh = bolt_mesh
+	weapon_bolt.position = Vector3(0, 0.105, -0.23)
+	weapon_bolt.material_override = mat
+	weapon_root.add_child(weapon_bolt)
 	muzzle_flash = MeshInstance3D.new()
 	var flash_mesh := SphereMesh.new()
 	flash_mesh.radius = 0.055
@@ -290,15 +308,39 @@ func _update_weapon(delta: float) -> void:
 	if is_instance_valid(weapon_view):
 		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.006
 		weapon_view.position = Vector3(0.34, -0.28 + bob, -0.58 + weapon_recoil)
+		weapon_view.rotation = Vector3.ZERO
+		if reload_clock > 0.0:
+			reload_elapsed += delta
+			var progress := clampf(reload_elapsed / maxf(reload_duration, 0.01), 0.0, 1.0)
+			var dip := sin(progress * PI)
+			weapon_view.position.y -= 0.22 * dip
+			weapon_view.position.x += 0.10 * dip
+			weapon_view.rotation.z = -0.48 * dip
+			weapon_view.rotation.x = 0.20 * dip
+			var magazine_out := clampf((progress - 0.16) / 0.18, 0.0, 1.0) * (1.0 - clampf((progress - 0.62) / 0.18, 0.0, 1.0))
+			if is_instance_valid(weapon_magazine):
+				weapon_magazine.position.y = -0.18 - 0.28 * magazine_out
+			if is_instance_valid(weapon_bolt):
+				weapon_bolt.position.z = -0.23 + 0.10 * sin(progress * PI)
+		else:
+			if is_instance_valid(weapon_magazine):
+				weapon_magazine.position = Vector3(0, -0.18, -0.12)
+			if is_instance_valid(weapon_bolt):
+				weapon_bolt.position.z = -0.23
 	if is_instance_valid(muzzle_flash):
 		muzzle_flash.visible = muzzle_clock > 0.0
 	if reload_clock > 0:
 		reload_clock -= delta
 		if reload_clock <= 0:
+			reload_clock = 0.0
 			var need: int = magazine_sizes[weapon] - ammo
 			var take := mini(need,reserve_ammo)
 			ammo += take
 			reserve_ammo -= take
+			if is_instance_valid(weapon_magazine):
+				weapon_magazine.position = Vector3(0, -0.18, -0.12)
+			if is_instance_valid(weapon_view):
+				weapon_view.rotation = Vector3.ZERO
 
 func _fire() -> void:
 	if ammo <= 0:
@@ -379,8 +421,10 @@ func _spawn_bullet_hole(point: Vector3, normal: Vector3) -> void:
 func _reload() -> void:
 	if reload_clock > 0 or ammo >= magazine_sizes[weapon] or reserve_ammo <= 0:
 		return
-	reload_clock = [1.8,1.3,2.5][weapon]
-	_show_message("RELOADING...", 1.0)
+	reload_duration = [1.8,1.3,2.5][weapon]
+	reload_clock = reload_duration
+	reload_elapsed = 0.0
+	_show_message("RELOADING...", reload_duration)
 
 func _select_weapon(index: int) -> void:
 	weapon = clampi(index,0,2)
