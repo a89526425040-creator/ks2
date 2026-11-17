@@ -37,7 +37,6 @@ var player_velocity := Vector3.ZERO
 var weapon_view: Node3D
 var weapon_magazine: MeshInstance3D
 var weapon_bolt: MeshInstance3D
-var imported_ak: Node3D
 var reload_elapsed := 0.0
 var reload_duration := 1.8
 var muzzle_flash: MeshInstance3D
@@ -213,67 +212,6 @@ func _add_weapon_model() -> void:
 	muzzle_flash.material_override = flash_mat
 	muzzle_flash.visible = false
 	weapon_root.add_child(muzzle_flash)
-
-	# Use the player's AKS-74 FBX model for the primary rifle.
-	var ak_scene := load("res://896cdfacb60948bd89918a152d25c658.fbx") as PackedScene
-	if ak_scene != null:
-		imported_ak = ak_scene.instantiate() as Node3D
-		if imported_ak != null:
-			imported_ak.name = "ImportedAKS74"
-			weapon_root.add_child(imported_ak)
-			_fit_imported_weapon(imported_ak)
-			body.visible = false
-			barrel.visible = false
-			grip.visible = false
-			weapon_magazine.visible = false
-			weapon_bolt.visible = false
-			print("KS2: imported AKS-74 FBX weapon model")
-	else:
-		push_warning("KS2: AKS-74 FBX could not be loaded; using procedural rifle fallback.")
-
-func _fit_imported_weapon(root: Node3D) -> void:
-	var bounds := _get_weapon_bounds(root, root)
-	if bounds.size.length() < 0.001:
-		return
-	var dimensions := bounds.size
-	var longest_axis := 2
-	if dimensions.x >= dimensions.y and dimensions.x >= dimensions.z:
-		longest_axis = 0
-	elif dimensions.y >= dimensions.x and dimensions.y >= dimensions.z:
-		longest_axis = 1
-	root.rotation = Vector3.ZERO
-	if longest_axis == 0:
-		root.rotation.y = PI * 0.5
-	elif longest_axis == 1:
-		root.rotation.x = PI * 0.5
-	var length := maxf(dimensions.x, maxf(dimensions.y, dimensions.z))
-	root.scale = Vector3.ONE * (0.98 / maxf(length, 0.001))
-	root.position = Vector3(0.0, 0.0, -0.28)
-	# Imported FBX origins vary; center the mesh around the weapon mount.
-	root.position -= root.basis * (bounds.position + bounds.size * 0.5) * root.scale.x
-
-func _get_weapon_bounds(node: Node, parent_transform: Transform3D = Transform3D.IDENTITY) -> AABB:
-	var result := AABB()
-	var found := false
-	for child in node.get_children():
-		var child_transform: Transform3D = parent_transform
-		if child is Node3D:
-			child_transform = parent_transform * (child as Node3D).transform
-		if child is MeshInstance3D and child.mesh != null:
-			var child_bounds: AABB = child.get_aabb() * child_transform
-			if not found:
-				result = child_bounds
-				found = true
-			else:
-				result = result.merge(child_bounds)
-		var nested := _get_weapon_bounds(child, child_transform)
-		if nested.size.length() > 0.001:
-			if not found:
-				result = nested
-				found = true
-			else:
-				result = result.merge(nested)
-	return result
 
 func _spawn_teams() -> void:
 	# Player is a defender; four allied bots and five attackers.
