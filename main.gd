@@ -325,10 +325,6 @@ func _update_objective(delta: float) -> void:
 		if round_clock <= 0:
 			_show_message("TIME EXPIRED! CT WIN",3.0)
 			_end_round(0)
-		if player.global_position.distance_to(bomb_position) < 4.0 and Input.is_key_pressed(KEY_E):
-			planted = true
-			bomb_clock = 35.0
-			_show_message("BOMB PLANTED! DEFUSE IT!",3.0)
 
 func _update_hud() -> void:
 	var alive_ct := 1
