@@ -34,6 +34,11 @@ var match_over := false
 var mouse_captured := false
 var player_speed := 7.2
 var player_velocity := Vector3.ZERO
+var weapon_view: Node3D
+var muzzle_flash: MeshInstance3D
+var muzzle_clock := 0.0
+var weapon_recoil := 0.0
+var bullet_holes: Array[Node3D] = []
 var message_clock := 0.0
 var bomb_position := Vector3(0, 0, -13)
 
@@ -143,10 +148,11 @@ func _spawn_player() -> void:
 	add_child(player)
 
 func _add_weapon_model() -> void:
-	var weapon_root := Node3D.new()
-	weapon_root.name = "WeaponView"
-	weapon_root.position = Vector3(0.34, -0.28, -0.58)
-	camera.add_child(weapon_root)
+	weapon_view = Node3D.new()
+	weapon_view.name = "WeaponView"
+	weapon_view.position = Vector3(0.34, -0.28, -0.58)
+	camera.add_child(weapon_view)
+	var weapon_root := weapon_view
 	var body := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.16,0.18,0.62)
@@ -173,6 +179,21 @@ func _add_weapon_model() -> void:
 	grip.position = Vector3(0,-0.17,-0.12)
 	grip.material_override = mat
 	weapon_root.add_child(grip)
+	muzzle_flash = MeshInstance3D.new()
+	var flash_mesh := SphereMesh.new()
+	flash_mesh.radius = 0.055
+	flash_mesh.height = 0.11
+	muzzle_flash.mesh = flash_mesh
+	muzzle_flash.position = Vector3(0, 0, -0.96)
+	var flash_mat := StandardMaterial3D.new()
+	flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	flash_mat.albedo_color = Color(1.0, 0.62, 0.12)
+	flash_mat.emission_enabled = true
+	flash_mat.emission = Color(1.0, 0.38, 0.06)
+	flash_mat.emission_energy_multiplier = 3.0
+	muzzle_flash.material_override = flash_mat
+	muzzle_flash.visible = false
+	weapon_root.add_child(muzzle_flash)
 
 func _spawn_teams() -> void:
 	# Player is a defender; four allied bots and five attackers.
@@ -264,6 +285,13 @@ func _update_player(delta: float) -> void:
 
 func _update_weapon(delta: float) -> void:
 	fire_clock = maxf(0, fire_clock-delta)
+	weapon_recoil = move_toward(weapon_recoil, 0.0, delta * 1.8)
+	muzzle_clock = maxf(0.0, muzzle_clock - delta)
+	if is_instance_valid(weapon_view):
+		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.006
+		weapon_view.position = Vector3(0.34, -0.28 + bob, -0.58 + weapon_recoil)
+	if is_instance_valid(muzzle_flash):
+		muzzle_flash.visible = muzzle_clock > 0.0
 	if reload_clock > 0:
 		reload_clock -= delta
 		if reload_clock <= 0:
@@ -278,17 +306,75 @@ func _fire() -> void:
 		return
 	ammo -= 1
 	fire_clock = fire_delays[weapon]
+	weapon_recoil = minf(weapon_recoil + [0.075, 0.045, 0.14][weapon], 0.22)
+	muzzle_clock = 0.055
 	var from := camera.global_position
 	var to := from + (-camera.global_transform.basis.z * 100.0)
 	var query := PhysicsRayQueryParameters3D.create(from,to)
 	query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var tracer_end: Vector3 = hit.position if not hit.is_empty() else to
+	_spawn_tracer(from + (-camera.global_transform.basis.z * 0.85), tracer_end)
 	if not hit.is_empty():
 		var target: Object = hit.collider
+		if not (target is CharacterBody3D):
+			_spawn_bullet_hole(hit.position, hit.normal)
 		if target is CharacterBody3D and target.has_method("take_damage"):
 			target.take_damage(damage_values[weapon], player)
 		elif target == player:
 			pass
+
+func _spawn_tracer(start: Vector3, finish: Vector3) -> void:
+	var distance := start.distance_to(finish)
+	if distance < 0.1:
+		return
+	var tracer := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.014, 0.014, distance)
+	tracer.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.78, 0.32, 0.9)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.52, 0.12)
+	material.emission_energy_multiplier = 2.0
+	tracer.material_override = material
+	add_child(tracer)
+	tracer.global_position = (start + finish) * 0.5
+	tracer.look_at(finish, Vector3.UP)
+	_remove_tracer_later(tracer)
+
+func _remove_tracer_later(tracer: Node3D) -> void:
+	await get_tree().create_timer(0.055).timeout
+	if is_instance_valid(tracer):
+		tracer.queue_free()
+
+func _spawn_bullet_hole(point: Vector3, normal: Vector3) -> void:
+	if normal.length_squared() < 0.5:
+		return
+	var hole := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.052
+	mesh.bottom_radius = 0.052
+	mesh.height = 0.008
+	hole.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.035, 0.028, 0.022)
+	material.roughness = 1.0
+	hole.material_override = material
+	var n := normal.normalized()
+	var tangent := n.cross(Vector3.UP)
+	if tangent.length_squared() < 0.01:
+		tangent = n.cross(Vector3.RIGHT)
+	tangent = tangent.normalized()
+	var bitangent := tangent.cross(n).normalized()
+	add_child(hole)
+	hole.global_transform = Transform3D(Basis(tangent, n, bitangent), point + n * 0.006)
+	bullet_holes.append(hole)
+	if bullet_holes.size() > 80:
+		var oldest: Node3D = bullet_holes.pop_front()
+		if is_instance_valid(oldest):
+			oldest.queue_free()
 
 func _reload() -> void:
 	if reload_clock > 0 or ammo >= magazine_sizes[weapon] or reserve_ammo <= 0:
