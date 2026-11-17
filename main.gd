@@ -37,6 +37,8 @@ var player_velocity := Vector3.ZERO
 var weapon_view: Node3D
 var weapon_magazine: MeshInstance3D
 var weapon_bolt: MeshInstance3D
+var imported_weapon: Node3D
+var fallback_weapon_parts: Array[MeshInstance3D] = []
 var reload_elapsed := 0.0
 var reload_duration := 1.8
 var muzzle_flash: MeshInstance3D
@@ -212,6 +214,72 @@ func _add_weapon_model() -> void:
 	muzzle_flash.material_override = flash_mat
 	muzzle_flash.visible = false
 	weapon_root.add_child(muzzle_flash)
+	fallback_weapon_parts = [body, barrel, grip, weapon_magazine, weapon_bolt, muzzle_flash]
+	_load_ak_weapon()
+
+func _load_ak_weapon() -> void:
+	# The procedural weapon remains visible unless the imported FBX is verified.
+	var weapon_resource: Resource = ResourceLoader.load("res://896cdfacb60948bd89918a152d25c658.fbx")
+	if not (weapon_resource is PackedScene):
+		push_warning("KS2: AK FBX did not import as a PackedScene; keeping fallback weapon.")
+		return
+	var instance: Node = (weapon_resource as PackedScene).instantiate()
+	if not (instance is Node3D):
+		instance.free()
+		push_warning("KS2: AK FBX root is not Node3D; keeping fallback weapon.")
+		return
+	imported_weapon = instance as Node3D
+	imported_weapon.name = "ImportedAKS74"
+	weapon_view.add_child(imported_weapon)
+	var bounds := _collect_weapon_bounds(imported_weapon, imported_weapon)
+	if bounds.size.length() < 0.001:
+		imported_weapon.queue_free()
+		imported_weapon = null
+		push_warning("KS2: AK FBX contains no visible mesh; keeping fallback weapon.")
+		return
+	# Align the longest model axis with the barrel direction (-Z).
+	var dimensions := bounds.size
+	var longest_axis := 2
+	if dimensions.x >= dimensions.y and dimensions.x >= dimensions.z:
+		longest_axis = 0
+	elif dimensions.y >= dimensions.x and dimensions.y >= dimensions.z:
+		longest_axis = 1
+	imported_weapon.rotation = Vector3.ZERO
+	if longest_axis == 0:
+		imported_weapon.rotation.y = PI * 0.5
+	elif longest_axis == 1:
+		imported_weapon.rotation.x = PI * 0.5
+	var scale_factor := 0.98 / maxf(dimensions.x, maxf(dimensions.y, dimensions.z))
+	imported_weapon.scale = Vector3.ONE * scale_factor
+	var rotated_bounds: AABB = bounds * Transform3D(imported_weapon.basis, Vector3.ZERO)
+	imported_weapon.position = Vector3(0.0, 0.0, -0.52) - imported_weapon.basis * bounds.get_center() * scale_factor
+	# Hide the primitive only after the FBX has passed the mesh check.
+	for part in fallback_weapon_parts:
+		if is_instance_valid(part):
+			part.visible = false
+	print("KS2: imported AKS-74 FBX with %d mesh bounds; scale %.4f" % [1, scale_factor])
+
+func _collect_weapon_bounds(node: Node, root: Node3D) -> AABB:
+	var combined := AABB()
+	var found := false
+	for child in node.get_children():
+		if child is MeshInstance3D and child.mesh != null:
+			var mesh_node := child as MeshInstance3D
+			var relative_transform := root.global_transform.affine_inverse() * mesh_node.global_transform
+			var mesh_bounds: AABB = mesh_node.get_aabb() * relative_transform
+			if not found:
+				combined = mesh_bounds
+				found = true
+			else:
+				combined = combined.merge(mesh_bounds)
+		var nested := _collect_weapon_bounds(child, root)
+		if nested.size.length() > 0.001:
+			if not found:
+				combined = nested
+				found = true
+			else:
+				combined = combined.merge(nested)
+	return combined
 
 func _spawn_teams() -> void:
 	# Player is a defender; four allied bots and five attackers.
@@ -428,6 +496,11 @@ func _reload() -> void:
 
 func _select_weapon(index: int) -> void:
 	weapon = clampi(index,0,2)
+	if is_instance_valid(imported_weapon):
+		imported_weapon.visible = weapon == 0
+		for part in fallback_weapon_parts:
+			if is_instance_valid(part):
+				part.visible = weapon != 0
 	ammo = mini(ammo,magazine_sizes[weapon])
 	reserve_ammo = [90,48,20][weapon]
 	_show_message(weapon_names[weapon],1.0)
