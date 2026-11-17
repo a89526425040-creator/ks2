@@ -360,7 +360,7 @@ func damage_bot(bot: CharacterBody3D, amount: int) -> void:
 				if b.team == 0: ct_alive += 1
 				else: t_alive += 1
 		if t_alive == 0: _end_round(0)
-		elif ct_alive == 0: _end_round(1)
+		elif ct_alive == 0 and player_health <= 0: _end_round(1)
 
 func _end_round(winner: int) -> void:
 	if round_over: return
