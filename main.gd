@@ -255,7 +255,7 @@ func _update_player(delta: float) -> void:
 	if not player.is_on_floor(): player.velocity.y -= 22.0 * delta
 	elif Input.is_action_just_pressed("jump"): player.velocity.y = 6.0
 	player.move_and_slide()
-	if Input.is_action_just_pressed("fire") and fire_clock <= 0 and reload_clock <= 0:
+	if ((weapon == 0 and Input.is_action_pressed("fire")) or Input.is_action_just_pressed("fire")) and fire_clock <= 0 and reload_clock <= 0:
 		_fire()
 	if Input.is_action_just_pressed("reload"):
 		_reload()
