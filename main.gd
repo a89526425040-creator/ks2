@@ -250,20 +250,21 @@ func _fit_imported_weapon(root: Node3D) -> void:
 	root.scale = Vector3.ONE * (0.98 / maxf(length, 0.001))
 	root.position = Vector3(0.0, 0.0, -0.28)
 	# Imported FBX origins vary; center the mesh around the weapon mount.
-	root.position -= root.rotation * (bounds.position + bounds.size * 0.5) * root.scale.x
+	root.position -= root.basis * (bounds.position + bounds.size * 0.5) * root.scale.x
 
-func _get_weapon_bounds(node: Node, root: Node3D) -> AABB:
+func _get_weapon_bounds(node: Node, parent_transform: Transform3D = Transform3D.IDENTITY) -> AABB:
 	var result := AABB()
 	var found := false
 	for child in node.get_children():
+		var child_transform: Transform3D = parent_transform * child.transform
 		if child is MeshInstance3D and child.mesh != null:
-			var child_bounds: AABB = child.get_aabb() * child.transform
+			var child_bounds: AABB = child.get_aabb() * child_transform
 			if not found:
 				result = child_bounds
 				found = true
 			else:
 				result = result.merge(child_bounds)
-		var nested := _get_weapon_bounds(child, root)
+		var nested := _get_weapon_bounds(child, child_transform)
 		if nested.size.length() > 0.001:
 			if not found:
 				result = nested
