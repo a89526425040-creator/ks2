@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build
-          godot --headless --path . --editor --quit
+          godot --headless --path . --editor --quit --check-only
           godot --headless --path . --export-release "Windows Desktop" build/KS2.exe
           test -s build/KS2.exe
       - name: Package Windows build
