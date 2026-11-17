@@ -9,7 +9,6 @@ var think_clock := 0.0
 var shoot_clock := 0.5
 var target: Node3D
 var rng := RandomNumberGenerator.new()
-var body_mesh: MeshInstance3D
 
 func _ready() -> void:
 	rng.randomize()
@@ -19,7 +18,7 @@ func _ready() -> void:
 	capsule.height = 1.8
 	shape.shape = capsule
 	add_child(shape)
-	body_mesh = MeshInstance3D.new()
+	var body_mesh := MeshInstance3D.new()
 	var mesh := CapsuleMesh.new()
 	mesh.radius = 0.38
 	mesh.height = 1.8
@@ -43,17 +42,37 @@ func _physics_process(delta: float) -> void:
 		return
 	shoot_clock -= delta
 	think_clock -= delta
+
+	# Attackers first move to the marked bomb site and plant.
+	if team == 1 and not game.planted:
+		var site_delta: Vector3 = game.bomb_position - global_position
+		site_delta.y = 0
+		if site_delta.length() > 3.2:
+			var site_dir := site_delta.normalized()
+			velocity.x = site_dir.x * speed
+			velocity.z = site_dir.z * speed
+			_apply_gravity(delta)
+			move_and_slide()
+			if velocity.length() > 0.3:
+				look_at(global_position + Vector3(velocity.x,0,velocity.z),Vector3.UP)
+			return
+		else:
+			game.planted = true
+			game.bomb_clock = 35.0
+			game._show_message("BOMB PLANTED! DEFUSE IT!",3.0)
+
 	if think_clock <= 0:
 		think_clock = rng.randf_range(0.25,0.6)
 		target = _find_target()
 	if not is_instance_valid(target):
-		velocity.x = move_toward(velocity.x,0, speed*delta)
-		velocity.z = move_toward(velocity.z,0, speed*delta)
+		velocity.x = move_toward(velocity.x,0,speed*delta)
+		velocity.z = move_toward(velocity.z,0,speed*delta)
+		_apply_gravity(delta)
 		move_and_slide()
 		return
 	var dist := global_position.distance_to(target.global_position)
 	if dist > 10.0:
-		var dir := (target.global_position-global_position)
+		var dir := target.global_position-global_position
 		dir.y = 0
 		dir = dir.normalized()
 		velocity.x = dir.x*speed
@@ -62,34 +81,37 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x,0,speed*delta)
 		velocity.z = move_toward(velocity.z,0,speed*delta)
 		_try_shoot(dist)
+	_apply_gravity(delta)
+	move_and_slide()
+	if velocity.length() > 0.3:
+		look_at(global_position + Vector3(velocity.x,0,velocity.z),Vector3.UP)
+
+func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= 20.0*delta
 	else:
 		velocity.y = 0
-	move_and_slide()
-	if velocity.length() > 0.3:
-		look_at(global_position + Vector3(velocity.x,0,velocity.z),Vector3.UP)
 
 func _find_target() -> Node3D:
 	if team == 1:
 		if is_instance_valid(game.player) and game.player_health > 0:
 			return game.player
-		var ally := _nearest_bot(0)
-		return ally
+		return _nearest_bot(0)
 	return _nearest_bot(1)
 
 func _nearest_bot(enemy_team: int) -> Node3D:
 	var best: Node3D
 	var best_d := INF
 	for b in game.bots:
-		if is_instance_valid(b) and b.health > 0 and b.team == enemy_team:
+		if is_instance_valid(b) and b != self and b.health > 0 and b.team == enemy_team:
 			var d := global_position.distance_squared_to(b.global_position)
 			if d < best_d:
 				best_d = d
 				best = b
 	if enemy_team == 1 and game.player_health > 0:
 		var pd := global_position.distance_squared_to(game.player.global_position)
-		if pd < best_d: best = game.player
+		if pd < best_d:
+			best = game.player
 	return best
 
 func _try_shoot(dist: float) -> void:
@@ -99,11 +121,13 @@ func _try_shoot(dist: float) -> void:
 	var origin := global_position + Vector3(0,0.65,0)
 	var destination := target.global_position + Vector3(0,0.5,0)
 	var direction := destination-origin
-	if direction.length() > 22.0: return
+	if direction.length() > 22.0:
+		return
 	var query := PhysicsRayQueryParameters3D.create(origin,destination)
 	query.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty(): return
+	if hit.is_empty():
+		return
 	var victim: Object = hit.collider
 	if victim == game.player and team == 1:
 		game.damage_player(rng.randi_range(7,13))
@@ -111,5 +135,6 @@ func _try_shoot(dist: float) -> void:
 		victim.take_damage(rng.randi_range(8,14),self)
 
 func take_damage(amount: int, _source: Object = null) -> void:
-	if health <= 0: return
+	if health <= 0:
+		return
 	game.damage_bot(self,amount)
