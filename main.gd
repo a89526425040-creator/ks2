@@ -376,7 +376,7 @@ func _create_reload_magazine() -> void:
 	reload_magazine.position = reload_magazine_home
 	reload_magazine.rotation_degrees = Vector3(-8, 0, 0)
 	weapon_view.add_child(reload_magazine)
-	reload_magazine.visible = is_instance_valid(imported_weapon)
+	reload_magazine.visible = false
 
 func _spawn_dropped_magazine() -> void:
 	if not is_instance_valid(reload_magazine) or not is_instance_valid(camera):
@@ -775,6 +775,8 @@ func _update_weapon(delta: float) -> void:
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position.y = -0.18 - 0.28 * magazine_out
 			if is_instance_valid(imported_magazine):
+				# Use the animated reload proxy only during the reload; hide the FBX magazine to avoid a duplicate.
+				imported_magazine.visible = false
 				imported_magazine.position = imported_magazine_home + Vector3(0.0, -0.24 * magazine_out, 0.0)
 			var rack := clampf((progress - 0.76) / 0.10, 0.0, 1.0) * (1.0 - clampf((progress - 0.90) / 0.06, 0.0, 1.0))
 			if is_instance_valid(weapon_bolt):
@@ -786,11 +788,14 @@ func _update_weapon(delta: float) -> void:
 				weapon_magazine.position = Vector3(0, -0.18, -0.12)
 			if is_instance_valid(reload_magazine):
 				reload_magazine.position = reload_magazine_home
-				reload_magazine.visible = is_instance_valid(imported_weapon)
+				reload_magazine.visible = false
+			if is_instance_valid(imported_magazine):
+				imported_magazine.visible = true
 			if is_instance_valid(weapon_bolt):
 				weapon_bolt.position.z = -0.23
 			if is_instance_valid(imported_magazine):
 				imported_magazine.position = imported_magazine_home
+				imported_magazine.visible = true
 			if is_instance_valid(imported_bolt):
 				imported_bolt.position = imported_bolt_home
 	if is_instance_valid(muzzle_flash):
