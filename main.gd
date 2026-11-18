@@ -250,54 +250,83 @@ func _add_weapon_model() -> void:
 	_create_reload_magazine()
 
 func _load_ak_weapon() -> void:
-	# Build a clean AK-style first-person weapon from separate parts.
-	# The imported FBX is intentionally not used here: its stock contains
-	# an unwanted protruding rod which is part of the source geometry.
+	# Load the supplied textured FBX. Keep the fallback visible until fitting succeeds.
 	imported_weapon = Node3D.new()
-	imported_weapon.name = "CleanAKS74"
+	imported_weapon.name = "ImportedAKS74"
 	weapon_view.add_child(imported_weapon)
-	var dark := _weapon_material(Color(0.105, 0.115, 0.11), 0.38)
-	var metal := _weapon_material(Color(0.19, 0.205, 0.19), 0.32)
-	var wood := _weapon_material(Color(0.30, 0.19, 0.105), 0.72)
-	var black := _weapon_material(Color(0.045, 0.05, 0.047), 0.3)
+	var packed := load("res://896cdfacb60948bd89918a152d25c658.fbx") as PackedScene
+	if packed == null:
+		push_error("KS2: AKS-74 FBX could not be loaded; fallback remains visible")
+		imported_weapon.queue_free()
+		imported_weapon = null
+		return
+	var instance := packed.instantiate()
+	if instance == null:
+		push_error("KS2: AKS-74 FBX scene is empty; fallback remains visible")
+		imported_weapon.queue_free()
+		imported_weapon = null
+		return
+	var model: Node3D
+	if instance is Node3D:
+		model = instance as Node3D
+	else:
+		model = Node3D.new()
+		model.add_child(instance)
+	model.name = "AKS74_FBX"
+	imported_weapon.add_child(model)
+	call_deferred("_fit_imported_ak", model)
 
-	# Receiver and upper cover.
-	_weapon_box(imported_weapon, "Receiver", Vector3(0.17, 0.17, 0.48), Vector3(0, 0, 0.02), dark)
-	_weapon_box(imported_weapon, "Top cover", Vector3(0.145, 0.045, 0.40), Vector3(0, 0.105, 0.015), metal)
-	_weapon_box(imported_weapon, "Rear receiver block", Vector3(0.16, 0.15, 0.13), Vector3(0, 0.015, 0.29), dark)
 
-	# Wooden handguard and the barrel assembly.
-	_weapon_box(imported_weapon, "Lower handguard", Vector3(0.155, 0.125, 0.34), Vector3(0, -0.005, -0.385), wood)
-	_weapon_box(imported_weapon, "Upper handguard", Vector3(0.12, 0.075, 0.34), Vector3(0, 0.105, -0.385), wood)
-	_weapon_cylinder(imported_weapon, "Barrel", 0.027, 0.027, 0.58, Vector3(0, 0.015, -0.82), metal)
-	_weapon_cylinder(imported_weapon, "Muzzle brake", 0.043, 0.038, 0.13, Vector3(0, 0.015, -1.16), black)
-	_weapon_cylinder(imported_weapon, "Gas tube", 0.025, 0.025, 0.34, Vector3(0, 0.145, -0.55), dark)
-
-	# Solid wooden buttstock: no thin rod or brace behind the stock.
-	_weapon_box(imported_weapon, "Wooden buttstock", Vector3(0.13, 0.19, 0.43), Vector3(0, 0.005, 0.47), wood)
-	_weapon_box(imported_weapon, "Rubber butt plate", Vector3(0.14, 0.205, 0.035), Vector3(0, 0.005, 0.70), black)
-
-	# Pistol grip and curved-looking detachable magazine.
-	var grip := _weapon_box(imported_weapon, "Pistol grip", Vector3(0.105, 0.24, 0.13), Vector3(0, -0.19, 0.12), black)
-	grip.rotation.x = -0.18
-	imported_magazine = _weapon_box(imported_weapon, "Magazine", Vector3(0.115, 0.285, 0.16), Vector3(0, -0.205, -0.075), black)
-	imported_magazine_home = imported_magazine.position
-	_weapon_box(imported_weapon, "Magazine base", Vector3(0.12, 0.025, 0.17), Vector3(0, -0.355, -0.075), metal)
-
-	# Sights, gas block, front block, charging handle and small details.
-	_weapon_box(imported_weapon, "Rear sight base", Vector3(0.075, 0.09, 0.075), Vector3(0, 0.17, -0.18), dark)
-	_weapon_box(imported_weapon, "Rear sight leaf", Vector3(0.035, 0.018, 0.12), Vector3(0, 0.22, -0.18), metal)
-	_weapon_box(imported_weapon, "Front sight block", Vector3(0.085, 0.12, 0.075), Vector3(0, 0.06, -0.99), dark)
-	_weapon_box(imported_weapon, "Front sight post", Vector3(0.018, 0.09, 0.018), Vector3(0, 0.16, -0.99), black)
-	imported_bolt = _weapon_box(imported_weapon, "Charging handle", Vector3(0.07, 0.045, 0.13), Vector3(0.105, 0.105, -0.02), metal)
-	imported_bolt_home = imported_bolt.position
-	_weapon_box(imported_weapon, "Selector", Vector3(0.018, 0.10, 0.13), Vector3(0.095, -0.015, 0.13), metal)
-
-	# Keep the existing muzzle flash and hide the old primitive placeholder.
+func _fit_imported_ak(model: Node3D) -> void:
+	if not is_instance_valid(model) or not is_instance_valid(imported_weapon):
+		return
+	model.position = Vector3.ZERO
+	model.rotation = Vector3.ZERO
+	model.scale = Vector3.ONE
+	await get_tree().process_frame
+	if not is_instance_valid(model) or not is_instance_valid(imported_weapon):
+		return
+	var bounds := _collect_weapon_bounds(model, imported_weapon)
+	if bounds.size.length() < 0.001:
+		push_error("KS2: AKS-74 FBX has no mesh bounds; fallback remains visible")
+		imported_weapon.queue_free()
+		imported_weapon = null
+		return
+	var dimensions := [bounds.size.x, bounds.size.y, bounds.size.z]
+	var long_axis := 0
+	for i in range(1, 3):
+		if dimensions[i] > dimensions[long_axis]:
+			long_axis = i
+	if long_axis == 0:
+		model.rotation.y = PI * 0.5
+	elif long_axis == 1:
+		model.rotation.x = PI * 0.5
+	await get_tree().process_frame
+	if not is_instance_valid(model) or not is_instance_valid(imported_weapon):
+		return
+	bounds = _collect_weapon_bounds(model, imported_weapon)
+	var longest := maxf(bounds.size.x, maxf(bounds.size.y, bounds.size.z))
+	if longest < 0.001:
+		push_error("KS2: invalid AKS-74 bounds after orientation; fallback remains visible")
+		imported_weapon.queue_free()
+		imported_weapon = null
+		return
+	var fit_scale := 1.42 / longest
+	model.scale = Vector3.ONE * fit_scale
+	model.position = -bounds.get_center() * fit_scale + Vector3(0.0, -0.035, 0.0)
+	await get_tree().process_frame
+	if not is_instance_valid(model):
+		return
+	imported_magazine = _find_weapon_part(model, ["magazine", "mag"])
+	imported_bolt = _find_weapon_part(model, ["charging", "bolt", "handle"])
+	if is_instance_valid(imported_magazine):
+		imported_magazine_home = imported_magazine.position
+	if is_instance_valid(imported_bolt):
+		imported_bolt_home = imported_bolt.position
 	for part in fallback_weapon_parts:
 		if is_instance_valid(part):
 			part.visible = false
-	print("KS2: clean procedural AKS-74 assembled; stock rod removed")
+	print("KS2: original textured AKS-74 FBX loaded; bounds=", bounds.size)
 
 
 func _weapon_material(color: Color, roughness: float) -> StandardMaterial3D:
@@ -571,7 +600,9 @@ func _apply_weapon_skin(weapon_index: int) -> void:
 	var secondary: Color = skin_secondary_colors[skin_index]
 	var accent: Color = skin_accent_colors[skin_index]
 	if weapon_index == 0 and is_instance_valid(imported_weapon):
-		_apply_ak_skin_recursive(imported_weapon, primary, secondary, accent)
+		# CLASSIC uses the FBX's original material and wood textures.
+		if skin_index > 0:
+			_apply_ak_skin_recursive(imported_weapon, primary, secondary, accent)
 	elif weapon_index > 0:
 		for part in fallback_weapon_parts:
 			if not is_instance_valid(part) or part == muzzle_flash:
@@ -590,10 +621,10 @@ func _apply_ak_skin_recursive(node: Node, primary: Color, secondary: Color, acce
 		if child is MeshInstance3D:
 			var part := child as MeshInstance3D
 			if part.mesh != null:
+				var part_name := part.name.to_lower()
 				var a := primary
 				var b := secondary
 				var c := accent
-				var part_name := part.name.to_lower()
 				if part_name.contains("wood") or part_name.contains("stock") or part_name.contains("handguard"):
 					a = accent
 					b = primary
@@ -606,32 +637,43 @@ func _apply_ak_skin_recursive(node: Node, primary: Color, secondary: Color, acce
 					a = secondary
 					b = primary
 					c = secondary
-				var shader := Shader.new()
-				shader.code = """
+				for surface in range(part.mesh.get_surface_count()):
+					var source := part.get_active_material(surface)
+					var base_texture: Texture2D
+					var base_color := Color.WHITE
+					if source is StandardMaterial3D:
+						base_texture = (source as StandardMaterial3D).albedo_texture
+						base_color = (source as StandardMaterial3D).albedo_color
+					var shader := Shader.new()
+					shader.code = """
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
+uniform sampler2D base_texture : source_color;
+uniform bool has_base_texture = false;
+uniform vec4 base_color : source_color = vec4(1.0);
 uniform vec4 skin_a : source_color;
 uniform vec4 skin_b : source_color;
 uniform vec4 skin_c : source_color;
 void fragment() {
-	vec2 cell = floor(UV * vec2(28.0, 18.0));
-	float n = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
-	float wave = sin(UV.x * 31.0 + sin(UV.y * 19.0) * 4.0) * 0.5 + 0.5;
-	float pattern = n * 0.72 + wave * 0.28;
-	vec3 finish_color = mix(skin_a.rgb, skin_b.rgb, smoothstep(0.34, 0.58, pattern));
-	finish_color = mix(finish_color, skin_c.rgb, smoothstep(0.68, 0.86, pattern) * 0.82);
-	ALBEDO = finish_color;
-	ROUGHNESS = 0.62;
-	METALLIC = 0.12;
+	vec3 original = (has_base_texture ? texture(base_texture, UV).rgb : vec3(1.0)) * base_color.rgb;
+	float p1 = sin(UV.x * 8.0 + sin(UV.y * 6.0) * 2.2) * 0.5 + 0.5;
+	float p2 = sin(UV.y * 17.0 + sin(UV.x * 11.0) * 1.7) * 0.5 + 0.5;
+	float mask = smoothstep(0.30, 0.72, p1 * 0.68 + p2 * 0.32);
+	vec3 camo = mix(skin_a.rgb, skin_b.rgb, mask);
+	camo = mix(camo, skin_c.rgb, smoothstep(0.76, 0.94, p2) * 0.42);
+	ALBEDO = mix(original, camo, 0.56);
+	ROUGHNESS = 0.72;
 }
 """
-				var skin_material := ShaderMaterial.new()
-				skin_material.shader = shader
-				skin_material.set_shader_parameter("skin_a", a)
-				skin_material.set_shader_parameter("skin_b", b)
-				skin_material.set_shader_parameter("skin_c", c)
-				# Replace the whole material override: it has priority over surface overrides.
-				part.material_override = skin_material
+					var skin_material := ShaderMaterial.new()
+					skin_material.shader = shader
+					skin_material.set_shader_parameter("base_texture", base_texture)
+					skin_material.set_shader_parameter("has_base_texture", base_texture != null)
+					skin_material.set_shader_parameter("base_color", base_color)
+					skin_material.set_shader_parameter("skin_a", a)
+					skin_material.set_shader_parameter("skin_b", b)
+					skin_material.set_shader_parameter("skin_c", c)
+					part.set_surface_override_material(surface, skin_material)
 		_apply_ak_skin_recursive(child, primary, secondary, accent)
 
 
