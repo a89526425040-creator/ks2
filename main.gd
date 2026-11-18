@@ -377,71 +377,149 @@ func _create_butterfly_knife() -> void:
 	knife_view.position = Vector3(0.39, -0.34, -0.62)
 	knife_view.rotation_degrees = Vector3(-8, -10, 4)
 	camera.add_child(knife_view)
+
 	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color(0.72, 0.77, 0.81)
-	steel.metallic = 0.92
-	steel.roughness = 0.19
+	steel.albedo_color = Color(0.70, 0.76, 0.81)
+	steel.metallic = 0.96
+	steel.roughness = 0.16
+	var edge_mat := StandardMaterial3D.new()
+	edge_mat.albedo_color = Color(0.91, 0.94, 0.97)
+	edge_mat.metallic = 1.0
+	edge_mat.roughness = 0.11
 	var dark := StandardMaterial3D.new()
-	dark.albedo_color = Color(0.055, 0.067, 0.078)
-	dark.metallic = 0.82
-	dark.roughness = 0.26
+	dark.albedo_color = Color(0.025, 0.033, 0.041)
+	dark.metallic = 0.88
+	dark.roughness = 0.24
 	var grip := StandardMaterial3D.new()
-	grip.albedo_color = Color(0.12, 0.14, 0.16)
-	grip.metallic = 0.48
-	grip.roughness = 0.32
+	grip.albedo_color = Color(0.075, 0.09, 0.105)
+	grip.metallic = 0.58
+	grip.roughness = 0.29
+	var accent := StandardMaterial3D.new()
+	accent.albedo_color = Color(0.48, 0.53, 0.58)
+	accent.metallic = 0.95
+	accent.roughness = 0.18
+
+	# Blade: tapered point, wide cutting section, spine and a recessed fuller.
 	var blade_root := Node3D.new()
-	blade_root.name = "Blade"
+	blade_root.name = "TaperedSteelBlade"
 	knife_view.add_child(blade_root)
-	var blade_mesh := BoxMesh.new()
-	blade_mesh.size = Vector3(0.048, 0.018, 0.40)
 	var blade := MeshInstance3D.new()
+	var blade_mesh := BoxMesh.new()
+	blade_mesh.size = Vector3(0.052, 0.019, 0.39)
 	blade.mesh = blade_mesh
-	blade.position = Vector3(0, 0, -0.23)
+	blade.position = Vector3(0, 0, -0.235)
 	blade.material_override = steel
 	blade_root.add_child(blade)
-	var bevel := MeshInstance3D.new()
-	var bevel_mesh := BoxMesh.new()
-	bevel_mesh.size = Vector3(0.052, 0.008, 0.32)
-	bevel.mesh = bevel_mesh
-	bevel.position = Vector3(0, -0.012, -0.20)
-	bevel.material_override = dark
-	blade_root.add_child(bevel)
-	var guard := MeshInstance3D.new()
-	var guard_mesh := BoxMesh.new()
-	guard_mesh.size = Vector3(0.12, 0.035, 0.045)
-	guard.mesh = guard_mesh
-	guard.position = Vector3(0, 0, -0.015)
-	guard.material_override = steel
-	blade_root.add_child(guard)
+	var point := MeshInstance3D.new()
+	var point_mesh := PrismMesh.new()
+	point_mesh.size = Vector3(0.052, 0.019, 0.15)
+	point.mesh = point_mesh
+	point.position = Vector3(0, 0, -0.505)
+	point.rotation.x = PI * 0.5
+	point.material_override = steel
+	blade_root.add_child(point)
+	var edge := MeshInstance3D.new()
+	var edge_mesh := BoxMesh.new()
+	edge_mesh.size = Vector3(0.006, 0.004, 0.34)
+	edge.mesh = edge_mesh
+	edge.position = Vector3(-0.027, -0.009, -0.245)
+	edge.material_override = edge_mat
+	blade_root.add_child(edge)
+	var fuller := MeshInstance3D.new()
+	var fuller_mesh := BoxMesh.new()
+	fuller_mesh.size = Vector3(0.008, 0.003, 0.235)
+	fuller.mesh = fuller_mesh
+	fuller.position = Vector3(0.006, 0.010, -0.225)
+	fuller.material_override = dark
+	blade_root.add_child(fuller)
+	var spine := MeshInstance3D.new()
+	var spine_mesh := BoxMesh.new()
+	spine_mesh.size = Vector3(0.012, 0.009, 0.31)
+	spine.mesh = spine_mesh
+	spine.position = Vector3(0, 0.012, -0.22)
+	spine.material_override = accent
+	blade_root.add_child(spine)
+	var ricasso := MeshInstance3D.new()
+	var ricasso_mesh := BoxMesh.new()
+	ricasso_mesh.size = Vector3(0.062, 0.024, 0.075)
+	ricasso.mesh = ricasso_mesh
+	ricasso.position = Vector3(0, 0, -0.045)
+	ricasso.material_override = accent
+	blade_root.add_child(ricasso)
+
+	# Two separate skeleton handles with textured scales, liners and pivot hardware.
 	for side in [-1, 1]:
 		var pivot := Node3D.new()
-		pivot.position = Vector3(float(side) * 0.025, 0, 0.02)
+		pivot.name = "LeftHandlePivot" if side < 0 else "RightHandlePivot"
+		pivot.position = Vector3(float(side) * 0.027, 0, 0.025)
 		knife_view.add_child(pivot)
+		var liner := MeshInstance3D.new()
+		var liner_mesh := BoxMesh.new()
+		liner_mesh.size = Vector3(0.064, 0.025, 0.365)
+		liner.mesh = liner_mesh
+		liner.position = Vector3(0, 0, 0.18)
+		liner.material_override = accent
+		pivot.add_child(liner)
 		var handle := MeshInstance3D.new()
-		var handle_mesh := BoxMesh.new()
-		handle_mesh.size = Vector3(0.052, 0.043, 0.36)
+		var handle_mesh := CapsuleMesh.new()
+		handle_mesh.radius = 0.026
+		handle_mesh.height = 0.37
 		handle.mesh = handle_mesh
-		handle.position = Vector3(0, 0, 0.18)
+		handle.rotation.x = PI * 0.5
+		handle.position = Vector3(0, 0.016, 0.18)
 		handle.material_override = grip
 		pivot.add_child(handle)
 		var scale_panel := MeshInstance3D.new()
 		var panel_mesh := BoxMesh.new()
-		panel_mesh.size = Vector3(0.055, 0.012, 0.25)
+		panel_mesh.size = Vector3(0.057, 0.012, 0.285)
 		scale_panel.mesh = panel_mesh
-		scale_panel.position = Vector3(0, 0.027, 0.18)
+		scale_panel.position = Vector3(0, 0.038, 0.18)
 		scale_panel.material_override = dark
 		pivot.add_child(scale_panel)
-		var pin := MeshInstance3D.new()
-		var pin_mesh := CylinderMesh.new()
-		pin_mesh.top_radius = 0.022
-		pin_mesh.bottom_radius = 0.022
-		pin_mesh.height = 0.062
-		pin.mesh = pin_mesh
-		pin.rotation.z = PI / 2.0
-		pin.material_override = steel
-		pivot.add_child(pin)
-		if side < 0: knife_left_handle = pivot
-		else: knife_right_handle = pivot
+		for groove_index in range(5):
+			var groove := MeshInstance3D.new()
+			var groove_mesh := BoxMesh.new()
+			groove_mesh.size = Vector3(0.058, 0.003, 0.009)
+			groove.mesh = groove_mesh
+			groove.position = Vector3(0, 0.045, 0.075 + float(groove_index) * 0.052)
+			groove.material_override = accent
+			pivot.add_child(groove)
+		# Large pivot washer and smaller screw head.
+		var washer := MeshInstance3D.new()
+		var washer_mesh := CylinderMesh.new()
+		washer_mesh.top_radius = 0.031
+		washer_mesh.bottom_radius = 0.031
+		washer_mesh.height = 0.012
+		washer.mesh = washer_mesh
+		washer.rotation.z = PI * 0.5
+		washer.position = Vector3(0, 0, 0.015)
+		washer.material_override = dark
+		pivot.add_child(washer)
+		var screw := MeshInstance3D.new()
+		var screw_mesh := CylinderMesh.new()
+		screw_mesh.top_radius = 0.014
+		screw_mesh.bottom_radius = 0.014
+		screw_mesh.height = 0.018
+		screw.mesh = screw_mesh
+		screw.rotation.z = PI * 0.5
+		screw.position = Vector3(0, 0, 0.015)
+		screw.material_override = edge_mat
+		pivot.add_child(screw)
+		for pin_z in [0.105, 0.255]:
+			var pin := MeshInstance3D.new()
+			var pin_mesh := CylinderMesh.new()
+			pin_mesh.top_radius = 0.009
+			pin_mesh.bottom_radius = 0.009
+			pin_mesh.height = 0.012
+			pin.mesh = pin_mesh
+			pin.rotation.z = PI * 0.5
+			pin.position = Vector3(0, 0.047, pin_z)
+			pin.material_override = edge_mat
+			pivot.add_child(pin)
+		if side < 0:
+			knife_left_handle = pivot
+		else:
+			knife_right_handle = pivot
 	knife_view.visible = false
 
 func _update_butterfly_knife(delta: float) -> void:
