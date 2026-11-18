@@ -789,8 +789,6 @@ func _update_weapon(delta: float) -> void:
 			if is_instance_valid(reload_magazine):
 				reload_magazine.position = reload_magazine_home
 				reload_magazine.visible = false
-			if is_instance_valid(imported_magazine):
-				imported_magazine.visible = true
 			if is_instance_valid(weapon_bolt):
 				weapon_bolt.position.z = -0.23
 			if is_instance_valid(imported_magazine):
