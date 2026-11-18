@@ -590,53 +590,48 @@ func _apply_ak_skin_recursive(node: Node, primary: Color, secondary: Color, acce
 		if child is MeshInstance3D:
 			var part := child as MeshInstance3D
 			if part.mesh != null:
-				for surface in range(part.mesh.get_surface_count()):
-					var source: Material = part.get_active_material(surface)
-					var base_texture: Texture2D
-					var base_color := Color.WHITE
-					if source is StandardMaterial3D:
-						base_texture = (source as StandardMaterial3D).albedo_texture
-						base_color = (source as StandardMaterial3D).albedo_color
-					var a := primary
-					var b := secondary
-					var c := accent
-					var part_name := part.name.to_lower()
-					if part_name.contains("wood") or part_name.contains("stock") or part_name.contains("handguard"):
-						a = accent
-						b = primary
-					elif part_name.contains("magazine") or part_name.contains("mag"):
-						a = secondary
-					var shader := Shader.new()
-					shader.code = """
+				var a := primary
+				var b := secondary
+				var c := accent
+				var part_name := part.name.to_lower()
+				if part_name.contains("wood") or part_name.contains("stock") or part_name.contains("handguard"):
+					a = accent
+					b = primary
+					c = secondary
+				elif part_name.contains("magazine") or part_name.contains("mag"):
+					a = secondary
+					b = primary
+					c = accent
+				elif part_name.contains("barrel") or part_name.contains("sight") or part_name.contains("bolt") or part_name.contains("selector"):
+					a = secondary
+					b = primary
+					c = secondary
+				var shader := Shader.new()
+				shader.code = """
 shader_type spatial;
 render_mode diffuse_burley, specular_schlick_ggx;
-uniform sampler2D base_texture : source_color;
-uniform bool has_base_texture = false;
-uniform vec4 base_tint : source_color = vec4(1.0);
-uniform vec4 skin_a : source_color = vec4(0.12, 0.15, 0.13, 1.0);
-uniform vec4 skin_b : source_color = vec4(0.25, 0.28, 0.24, 1.0);
-uniform vec4 skin_c : source_color = vec4(0.42, 0.38, 0.27, 1.0);
+uniform vec4 skin_a : source_color;
+uniform vec4 skin_b : source_color;
+uniform vec4 skin_c : source_color;
 void fragment() {
-	vec3 original = has_base_texture ? texture(base_texture, UV).rgb : vec3(1.0);
-	float noise_value = fract(sin(dot(floor(UV * 34.0), vec2(127.1, 311.7))) * 43758.5453);
-	float wave = sin(UV.x * 41.0 + sin(UV.y * 23.0) * 3.0) * 0.5 + 0.5;
-	float mask_a = smoothstep(0.28, 0.48, noise_value + wave * 0.20);
-	float mask_b = smoothstep(0.52, 0.72, noise_value + wave * 0.16);
-	vec3 camo = mix(skin_a.rgb, skin_b.rgb, mask_a);
-	camo = mix(camo, skin_c.rgb, mask_b * 0.72);
-	ALBEDO = original * base_tint.rgb * camo * 1.65;
-	ROUGHNESS = 0.68;
+	vec2 cell = floor(UV * vec2(28.0, 18.0));
+	float n = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+	float wave = sin(UV.x * 31.0 + sin(UV.y * 19.0) * 4.0) * 0.5 + 0.5;
+	float pattern = n * 0.72 + wave * 0.28;
+	vec3 finish_color = mix(skin_a.rgb, skin_b.rgb, smoothstep(0.34, 0.58, pattern));
+	finish_color = mix(finish_color, skin_c.rgb, smoothstep(0.68, 0.86, pattern) * 0.82);
+	ALBEDO = finish_color;
+	ROUGHNESS = 0.62;
+	METALLIC = 0.12;
 }
 """
-					var skin_material := ShaderMaterial.new()
-					skin_material.shader = shader
-					skin_material.set_shader_parameter("base_texture", base_texture)
-					skin_material.set_shader_parameter("has_base_texture", base_texture != null)
-					skin_material.set_shader_parameter("base_tint", base_color)
-					skin_material.set_shader_parameter("skin_a", a)
-					skin_material.set_shader_parameter("skin_b", b)
-					skin_material.set_shader_parameter("skin_c", c)
-					part.set_surface_override_material(surface, skin_material)
+				var skin_material := ShaderMaterial.new()
+				skin_material.shader = shader
+				skin_material.set_shader_parameter("skin_a", a)
+				skin_material.set_shader_parameter("skin_b", b)
+				skin_material.set_shader_parameter("skin_c", c)
+				# Replace the whole material override: it has priority over surface overrides.
+				part.material_override = skin_material
 		_apply_ak_skin_recursive(child, primary, secondary, accent)
 
 
