@@ -38,6 +38,10 @@ var weapon_view: Node3D
 var weapon_magazine: MeshInstance3D
 var weapon_bolt: MeshInstance3D
 var imported_weapon: Node3D
+var imported_magazine: Node3D
+var imported_bolt: Node3D
+var imported_magazine_home := Vector3.ZERO
+var imported_bolt_home := Vector3.ZERO
 var fallback_weapon_parts: Array[MeshInstance3D] = []
 var reload_elapsed := 0.0
 var reload_duration := 1.8
@@ -231,6 +235,12 @@ func _load_ak_weapon() -> void:
 	imported_weapon = instance as Node3D
 	imported_weapon.name = "ImportedAKS74"
 	weapon_view.add_child(imported_weapon)
+	imported_magazine = _find_weapon_part(imported_weapon, ["mag", "magazine"])
+	imported_bolt = _find_weapon_part(imported_weapon, ["bolt", "charging", "handle"])
+	if is_instance_valid(imported_magazine):
+		imported_magazine_home = imported_magazine.position
+	if is_instance_valid(imported_bolt):
+		imported_bolt_home = imported_bolt.position
 	var bounds := _collect_weapon_bounds(imported_weapon, imported_weapon)
 	if bounds.size.length() < 0.001:
 		imported_weapon.queue_free()
@@ -258,6 +268,17 @@ func _load_ak_weapon() -> void:
 		if is_instance_valid(part):
 			part.visible = false
 	print("KS2: imported AKS-74 FBX with %d mesh bounds; scale %.4f" % [1, scale_factor])
+
+func _find_weapon_part(node: Node, name_hints: Array[String]) -> Node3D:
+	for child in node.get_children():
+		var child_name := child.name.to_lower()
+		for hint in name_hints:
+			if child_name.contains(hint) and child is Node3D and child != node:
+				return child as Node3D
+		var nested := _find_weapon_part(child, name_hints)
+		if is_instance_valid(nested):
+			return nested
+	return null
 
 func _collect_weapon_bounds(node: Node, root: Node3D) -> AABB:
 	var combined := AABB()
@@ -380,21 +401,36 @@ func _update_weapon(delta: float) -> void:
 		if reload_clock > 0.0:
 			reload_elapsed += delta
 			var progress := clampf(reload_elapsed / maxf(reload_duration, 0.01), 0.0, 1.0)
-			var dip := sin(progress * PI)
-			weapon_view.position.y -= 0.22 * dip
-			weapon_view.position.x += 0.10 * dip
-			weapon_view.rotation.z = -0.48 * dip
-			weapon_view.rotation.x = 0.20 * dip
-			var magazine_out := clampf((progress - 0.16) / 0.18, 0.0, 1.0) * (1.0 - clampf((progress - 0.62) / 0.18, 0.0, 1.0))
+			# Tactical reload sequence: lower and cant the rifle, remove the magazine,
+			# seat a fresh one, rack the action, then bring the rifle back on target.
+			var dip_in := clampf(progress / 0.18, 0.0, 1.0)
+			var dip_out := 1.0 - clampf((progress - 0.78) / 0.22, 0.0, 1.0)
+			var dip := minf(dip_in, dip_out)
+			weapon_view.position.y -= 0.24 * dip
+			weapon_view.position.x += 0.12 * dip
+			weapon_view.rotation.z = -0.58 * dip
+			weapon_view.rotation.x = 0.24 * dip
+			var mag_drop := clampf((progress - 0.20) / 0.12, 0.0, 1.0)
+			var mag_insert := clampf((progress - 0.55) / 0.13, 0.0, 1.0)
+			var magazine_out := mag_drop * (1.0 - mag_insert)
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position.y = -0.18 - 0.28 * magazine_out
+			if is_instance_valid(imported_magazine):
+				imported_magazine.position = imported_magazine_home + Vector3(0.0, -0.24 * magazine_out, 0.0)
+			var rack := clampf((progress - 0.76) / 0.10, 0.0, 1.0) * (1.0 - clampf((progress - 0.90) / 0.06, 0.0, 1.0))
 			if is_instance_valid(weapon_bolt):
-				weapon_bolt.position.z = -0.23 + 0.10 * sin(progress * PI)
+				weapon_bolt.position.z = -0.23 + 0.13 * rack
+			if is_instance_valid(imported_bolt):
+				imported_bolt.position = imported_bolt_home + Vector3(0.0, 0.0, 0.10 * rack)
 		else:
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position = Vector3(0, -0.18, -0.12)
 			if is_instance_valid(weapon_bolt):
 				weapon_bolt.position.z = -0.23
+			if is_instance_valid(imported_magazine):
+				imported_magazine.position = imported_magazine_home
+			if is_instance_valid(imported_bolt):
+				imported_bolt.position = imported_bolt_home
 	if is_instance_valid(muzzle_flash):
 		muzzle_flash.visible = muzzle_clock > 0.0
 	if reload_clock > 0:
@@ -407,6 +443,10 @@ func _update_weapon(delta: float) -> void:
 			reserve_ammo -= take
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position = Vector3(0, -0.18, -0.12)
+			if is_instance_valid(imported_magazine):
+				imported_magazine.position = imported_magazine_home
+			if is_instance_valid(imported_bolt):
+				imported_bolt.position = imported_bolt_home
 			if is_instance_valid(weapon_view):
 				weapon_view.rotation = Vector3.ZERO
 
