@@ -58,28 +58,34 @@ var knife_right_handle: Node3D
 var knife_inspect_time := 0.0
 var knife_inspecting := false
 var knife_attack_time := 0.0
+var knife_blade_material: StandardMaterial3D
+var knife_grip_material: StandardMaterial3D
+var knife_hardware_material: StandardMaterial3D
 var bullet_holes: Array[Node3D] = []
 var message_clock := 0.0
 var bomb_position := Vector3(0, 0, -13)
 var shop_panel: Panel
 var shop_weapon := 0
-var selected_skins := [0, 0, 0]
+var selected_skins := [0, 0, 0, 6]
 var shop_status_label: Label
-var skin_names := ["CLASSIC", "DESERT", "ARCTIC", "JUNGLE", "CRIMSON", "NEON"]
+var skin_names := ["CLASSIC", "DESERT", "ARCTIC", "JUNGLE", "CRIMSON", "NEON", "EMERALD"]
 var skin_base_colors: Array[Color] = [
 	Color(0.105, 0.115, 0.11), Color(0.43, 0.31, 0.19),
 	Color(0.62, 0.69, 0.73), Color(0.12, 0.25, 0.16),
-	Color(0.34, 0.055, 0.045), Color(0.12, 0.08, 0.28)
+	Color(0.34, 0.055, 0.045), Color(0.12, 0.08, 0.28),
+	Color(0.025, 0.42, 0.16)
 ]
 var skin_secondary_colors: Array[Color] = [
 	Color(0.19, 0.205, 0.19), Color(0.24, 0.17, 0.10),
 	Color(0.25, 0.31, 0.36), Color(0.055, 0.12, 0.075),
-	Color(0.12, 0.025, 0.025), Color(0.035, 0.23, 0.30)
+	Color(0.12, 0.025, 0.025), Color(0.035, 0.23, 0.30),
+	Color(0.008, 0.095, 0.045)
 ]
 var skin_accent_colors: Array[Color] = [
 	Color(0.30, 0.19, 0.105), Color(0.72, 0.56, 0.31),
 	Color(0.86, 0.91, 0.94), Color(0.35, 0.48, 0.25),
-	Color(0.78, 0.12, 0.08), Color(0.10, 0.82, 0.95)
+	Color(0.78, 0.12, 0.08), Color(0.10, 0.82, 0.95),
+	Color(0.24, 0.95, 0.48)
 ]
 
 
@@ -378,10 +384,13 @@ func _create_butterfly_knife() -> void:
 	knife_view.rotation_degrees = Vector3(-8, -10, 4)
 	camera.add_child(knife_view)
 
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = Color(0.70, 0.76, 0.81)
-	steel.metallic = 0.96
-	steel.roughness = 0.16
+	knife_blade_material = StandardMaterial3D.new()
+	knife_blade_material.albedo_color = Color(0.025, 0.42, 0.16)
+	knife_blade_material.metallic = 0.96
+	knife_blade_material.roughness = 0.14
+	knife_blade_material.clearcoat_enabled = true
+	knife_blade_material.clearcoat = 0.85
+	var steel := knife_blade_material
 	var edge_mat := StandardMaterial3D.new()
 	edge_mat.albedo_color = Color(0.91, 0.94, 0.97)
 	edge_mat.metallic = 1.0
@@ -390,14 +399,16 @@ func _create_butterfly_knife() -> void:
 	dark.albedo_color = Color(0.025, 0.033, 0.041)
 	dark.metallic = 0.88
 	dark.roughness = 0.24
-	var grip := StandardMaterial3D.new()
-	grip.albedo_color = Color(0.075, 0.09, 0.105)
-	grip.metallic = 0.58
-	grip.roughness = 0.29
-	var accent := StandardMaterial3D.new()
-	accent.albedo_color = Color(0.48, 0.53, 0.58)
-	accent.metallic = 0.95
-	accent.roughness = 0.18
+	knife_grip_material = StandardMaterial3D.new()
+	knife_grip_material.albedo_color = Color(0.008, 0.095, 0.045)
+	knife_grip_material.metallic = 0.72
+	knife_grip_material.roughness = 0.22
+	var grip := knife_grip_material
+	knife_hardware_material = StandardMaterial3D.new()
+	knife_hardware_material.albedo_color = Color(0.24, 0.95, 0.48)
+	knife_hardware_material.metallic = 0.98
+	knife_hardware_material.roughness = 0.13
+	var accent := knife_hardware_material
 
 	# Blade: tapered point, wide cutting section, spine and a recessed fuller.
 	var blade_root := Node3D.new()
@@ -675,7 +686,7 @@ func _build_hud() -> void:
 	shop_button.size = Vector2(205, 40)
 	shop_button.pressed.connect(_toggle_skin_shop)
 	hud.add_child(shop_button)
-	_label("WASD MOVE   •   MOUSE AIM   •   LMB FIRE   •   R RELOAD   •   1/2/3 WEAPONS   •   E INTERACT   •   B SKINS", Vector2(360,866), 17, Color(0.8,0.84,0.86))
+	_label("WASD MOVE   •   MOUSE AIM   •   LMB FIRE   •   R RELOAD   •   1/2/3/4 WEAPONS   •   E INTERACT   •   B SKINS", Vector2(360,866), 17, Color(0.8,0.84,0.86))
 
 func _build_skin_shop() -> void:
 	shop_panel = Panel.new()
@@ -709,7 +720,7 @@ func _build_skin_shop() -> void:
 	var weapon_row := HBoxContainer.new()
 	weapon_row.add_theme_constant_override("separation", 10)
 	layout.add_child(weapon_row)
-	for i in range(3):
+	for i in range(4):
 		var weapon_button := Button.new()
 		weapon_button.text = weapon_names[i]
 		weapon_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -769,7 +780,7 @@ func _toggle_skin_shop() -> void:
 
 
 func _set_shop_weapon(index: int) -> void:
-	shop_weapon = clampi(index, 0, 2)
+	shop_weapon = clampi(index, 0, 3)
 	_update_skin_shop_status()
 
 
@@ -798,6 +809,15 @@ func _apply_weapon_skin(weapon_index: int) -> void:
 		# CLASSIC uses the FBX's original material and wood textures.
 		if skin_index > 0:
 			_apply_ak_skin_recursive(imported_weapon, primary, secondary, accent)
+	elif weapon_index == 3:
+		if is_instance_valid(knife_blade_material):
+			knife_blade_material.albedo_color = primary
+			knife_blade_material.metallic = 0.96
+			knife_blade_material.roughness = 0.14
+		if is_instance_valid(knife_grip_material):
+			knife_grip_material.albedo_color = secondary
+		if is_instance_valid(knife_hardware_material):
+			knife_hardware_material.albedo_color = accent
 	elif weapon_index > 0:
 		for part in fallback_weapon_parts:
 			if not is_instance_valid(part) or part == muzzle_flash:
@@ -1118,7 +1138,7 @@ func _select_weapon(index: int) -> void:
 	knife_attack_time = 0.0
 	if is_instance_valid(imported_weapon):
 		imported_weapon.visible = weapon == 0
-	if weapon < 3:
+	if weapon < 4:
 		_apply_weapon_skin(weapon)
 	if is_instance_valid(reload_magazine):
 		reload_magazine.visible = weapon == 0 and reload_clock <= 0.0
