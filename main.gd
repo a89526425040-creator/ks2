@@ -55,6 +55,27 @@ var weapon_recoil := 0.0
 var bullet_holes: Array[Node3D] = []
 var message_clock := 0.0
 var bomb_position := Vector3(0, 0, -13)
+var shop_panel: Panel
+var shop_weapon := 0
+var selected_skins := [0, 0, 0]
+var shop_status_label: Label
+var skin_names := ["CLASSIC", "DESERT", "ARCTIC", "JUNGLE", "CRIMSON", "NEON"]
+var skin_base_colors: Array[Color] = [
+	Color(0.105, 0.115, 0.11), Color(0.43, 0.31, 0.19),
+	Color(0.62, 0.69, 0.73), Color(0.12, 0.25, 0.16),
+	Color(0.34, 0.055, 0.045), Color(0.12, 0.08, 0.28)
+]
+var skin_secondary_colors: Array[Color] = [
+	Color(0.19, 0.205, 0.19), Color(0.24, 0.17, 0.10),
+	Color(0.25, 0.31, 0.36), Color(0.055, 0.12, 0.075),
+	Color(0.12, 0.025, 0.025), Color(0.035, 0.23, 0.30)
+]
+var skin_accent_colors: Array[Color] = [
+	Color(0.30, 0.19, 0.105), Color(0.72, 0.56, 0.31),
+	Color(0.86, 0.91, 0.94), Color(0.35, 0.48, 0.25),
+	Color(0.78, 0.12, 0.08), Color(0.10, 0.82, 0.95)
+]
+
 
 func _ready() -> void:
 	_setup_input()
@@ -62,6 +83,8 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_teams()
 	_build_hud()
+	_build_skin_shop()
+	_apply_weapon_skin(0)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	mouse_captured = true
 	_show_message("KS2  |  COUNTER-TERRORISTS: PROTECT THE SITE", 4.0)
@@ -422,7 +445,161 @@ func _build_hud() -> void:
 	cross.add_theme_color_override("font_shadow_color", Color.BLACK)
 	cross.add_theme_constant_override("shadow_offset_x", 1)
 	cross.add_theme_constant_override("shadow_offset_y", 1)
-	_label("WASD MOVE   •   MOUSE AIM   •   LMB FIRE   •   R RELOAD   •   1/2/3 WEAPONS   •   E INTERACT   •   ESC MENU", Vector2(360,866), 17, Color(0.8,0.84,0.86))
+	var shop_button := Button.new()
+	shop_button.text = "FREE SKINS  [B]"
+	shop_button.position = Vector2(1370, 12)
+	shop_button.size = Vector2(205, 40)
+	shop_button.pressed.connect(_toggle_skin_shop)
+	hud.add_child(shop_button)
+	_label("WASD MOVE   •   MOUSE AIM   •   LMB FIRE   •   R RELOAD   •   1/2/3 WEAPONS   •   E INTERACT   •   B SKINS", Vector2(360,866), 17, Color(0.8,0.84,0.86))
+
+func _build_skin_shop() -> void:
+	shop_panel = Panel.new()
+	shop_panel.name = "FreeSkinShop"
+	shop_panel.position = Vector2(430, 105)
+	shop_panel.size = Vector2(740, 690)
+	shop_panel.visible = false
+	shop_panel.z_index = 20
+	hud.add_child(shop_panel)
+	var layout := VBoxContainer.new()
+	layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layout.offset_left = 22
+	layout.offset_top = 18
+	layout.offset_right = -22
+	layout.offset_bottom = -18
+	layout.add_theme_constant_override("separation", 14)
+	shop_panel.add_child(layout)
+
+	var heading := Label.new()
+	heading.text = "KS2  |  FREE WEAPON SKINS"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 30)
+	heading.add_theme_color_override("font_color", Color(0.95, 0.78, 0.35))
+	layout.add_child(heading)
+	var note := Label.new()
+	note.text = "ALL FINISHES ARE FREE — SELECT ANY LOOK"
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.add_theme_font_size_override("font_size", 16)
+	layout.add_child(note)
+
+	var weapon_row := HBoxContainer.new()
+	weapon_row.add_theme_constant_override("separation", 10)
+	layout.add_child(weapon_row)
+	for i in range(3):
+		var weapon_button := Button.new()
+		weapon_button.text = weapon_names[i]
+		weapon_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		weapon_button.custom_minimum_size = Vector2(0, 46)
+		weapon_button.pressed.connect(_set_shop_weapon.bind(i))
+		weapon_row.add_child(weapon_button)
+
+	var separator := HSeparator.new()
+	layout.add_child(separator)
+	var skin_grid := GridContainer.new()
+	skin_grid.columns = 2
+	skin_grid.add_theme_constant_override("h_separation", 12)
+	skin_grid.add_theme_constant_override("v_separation", 12)
+	layout.add_child(skin_grid)
+	for i in range(skin_names.size()):
+		var skin_button := Button.new()
+		skin_button.text = skin_names[i] + "   •   FREE"
+		skin_button.custom_minimum_size = Vector2(0, 88)
+		skin_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var style := StyleBoxFlat.new()
+		style.bg_color = skin_base_colors[i]
+		style.border_color = skin_accent_colors[i]
+		style.set_border_width_all(3)
+		style.set_corner_radius_all(8)
+		style.content_margin_left = 12
+		style.content_margin_right = 12
+		skin_button.add_theme_stylebox_override("normal", style)
+		var hover_style := style.duplicate() as StyleBoxFlat
+		hover_style.bg_color = skin_secondary_colors[i]
+		skin_button.add_theme_stylebox_override("hover", hover_style)
+		skin_button.add_theme_color_override("font_color", Color.WHITE)
+		skin_button.add_theme_color_override("font_hover_color", Color.WHITE)
+		skin_button.pressed.connect(_choose_skin.bind(i))
+		skin_grid.add_child(skin_button)
+
+	shop_status_label = Label.new()
+	shop_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	shop_status_label.add_theme_font_size_override("font_size", 17)
+	shop_status_label.add_theme_color_override("font_color", Color(0.35, 0.9, 0.58))
+	layout.add_child(shop_status_label)
+	var close_button := Button.new()
+	close_button.text = "CLOSE  [B]"
+	close_button.custom_minimum_size = Vector2(0, 48)
+	close_button.pressed.connect(_toggle_skin_shop)
+	layout.add_child(close_button)
+	_update_skin_shop_status()
+
+
+func _toggle_skin_shop() -> void:
+	if not is_instance_valid(shop_panel):
+		return
+	shop_panel.visible = not shop_panel.visible
+	mouse_captured = not shop_panel.visible
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if shop_panel.visible else Input.MOUSE_MODE_CAPTURED
+	if shop_panel.visible:
+		_update_skin_shop_status()
+
+
+func _set_shop_weapon(index: int) -> void:
+	shop_weapon = clampi(index, 0, 2)
+	_update_skin_shop_status()
+
+
+func _choose_skin(index: int) -> void:
+	selected_skins[shop_weapon] = clampi(index, 0, skin_names.size() - 1)
+	if weapon == shop_weapon:
+		_apply_weapon_skin(shop_weapon)
+	_update_skin_shop_status()
+	_show_message("%s SKIN: %s" % [weapon_names[shop_weapon], skin_names[index]], 1.8)
+
+
+func _update_skin_shop_status() -> void:
+	if not is_instance_valid(shop_status_label):
+		return
+	shop_status_label.text = "%s  |  EQUIPPED: %s  |  ALL SKINS FREE" % [
+		weapon_names[shop_weapon], skin_names[selected_skins[shop_weapon]]
+	]
+
+
+func _apply_weapon_skin(weapon_index: int) -> void:
+	var skin_index: int = selected_skins[weapon_index]
+	var primary: Color = skin_base_colors[skin_index]
+	var secondary: Color = skin_secondary_colors[skin_index]
+	var accent: Color = skin_accent_colors[skin_index]
+	if weapon_index == 0 and is_instance_valid(imported_weapon):
+		_apply_ak_skin_recursive(imported_weapon, primary, secondary, accent)
+	elif weapon_index > 0:
+		for part in fallback_weapon_parts:
+			if not is_instance_valid(part) or part == muzzle_flash:
+				continue
+			var part_name := part.name.to_lower()
+			var color := primary
+			if part_name.contains("magazine") or part_name.contains("bolt"):
+				color = accent
+			elif part_name.contains("grip") or part_name.contains("barrel"):
+				color = secondary
+			part.material_override = _weapon_material(color, 0.42)
+
+
+func _apply_ak_skin_recursive(node: Node, primary: Color, secondary: Color, accent: Color) -> void:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			var part := child as MeshInstance3D
+			var part_name := part.name.to_lower()
+			var color := primary
+			if part_name.contains("wood") or part_name.contains("handguard"):
+				color = accent
+			elif part_name.contains("barrel") or part_name.contains("sight") or part_name.contains("gas") or part_name.contains("charging"):
+				color = secondary
+			elif part_name.contains("magazine") or part_name.contains("selector"):
+				color = accent
+			part.material_override = _weapon_material(color, 0.4)
+		_apply_ak_skin_recursive(child, primary, secondary, accent)
+
 
 func _label(t: String, pos: Vector2, size: int, color: Color) -> Label:
 	var l := Label.new()
@@ -434,13 +611,19 @@ func _label(t: String, pos: Vector2, size: int, color: Color) -> Label:
 	return l
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and mouse_captured and not round_over:
+	if event is InputEventMouseMotion and mouse_captured and not round_over and not (is_instance_valid(shop_panel) and shop_panel.visible):
 		player.rotate_y(-event.relative.x * 0.0022)
 		camera.rotate_x(-event.relative.y * 0.0022)
 		camera.rotation.x = clamp(camera.rotation.x, -1.48, 1.48)
+	if event is InputEventKey and event.pressed and event.keycode == KEY_B:
+		_toggle_skin_shop()
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		mouse_captured = not mouse_captured
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if mouse_captured else Input.MOUSE_MODE_VISIBLE
+		if is_instance_valid(shop_panel) and shop_panel.visible:
+			_toggle_skin_shop()
+		else:
+			mouse_captured = not mouse_captured
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if mouse_captured else Input.MOUSE_MODE_VISIBLE
 	if event.is_action_pressed("weapon_1"): _select_weapon(0)
 	if event.is_action_pressed("weapon_2"): _select_weapon(1)
 	if event.is_action_pressed("weapon_3"): _select_weapon(2)
@@ -458,6 +641,9 @@ func _physics_process(delta: float) -> void:
 		if message_clock <= 0: message_label.text = ""
 
 func _update_player(delta: float) -> void:
+	if is_instance_valid(shop_panel) and shop_panel.visible:
+		player.velocity = Vector3.ZERO
+		return
 	if round_over:
 		player.velocity = Vector3.ZERO
 		return
@@ -642,6 +828,7 @@ func _select_weapon(index: int) -> void:
 	weapon = clampi(index,0,2)
 	if is_instance_valid(imported_weapon):
 		imported_weapon.visible = weapon == 0
+	_apply_weapon_skin(weapon)
 	if is_instance_valid(reload_magazine):
 		reload_magazine.visible = weapon == 0 and reload_clock <= 0.0
 		for part in fallback_weapon_parts:
