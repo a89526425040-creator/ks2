@@ -17,10 +17,10 @@ var player_health := 100
 var ammo := 30
 var reserve_ammo := 90
 var weapon := 0
-var weapon_names := ["AK-STYLE RIFLE", "PISTOL", "SNIPER"]
-var magazine_sizes := [30, 12, 5]
-var damage_values := [28, 35, 90]
-var fire_delays := [0.105, 0.24, 0.85]
+var weapon_names := ["AK-STYLE RIFLE", "PISTOL", "SNIPER", "BUTTERFLY KNIFE"]
+var magazine_sizes := [30, 12, 5, 0]
+var damage_values := [28, 35, 90, 65]
+var fire_delays := [0.105, 0.24, 0.85, 0.48]
 var fire_clock := 0.0
 var reload_clock := 0.0
 var round_clock := ROUND_TIME
@@ -52,6 +52,12 @@ var reload_duration := 1.8
 var muzzle_flash: MeshInstance3D
 var muzzle_clock := 0.0
 var weapon_recoil := 0.0
+var knife_view: Node3D
+var knife_left_handle: Node3D
+var knife_right_handle: Node3D
+var knife_inspect_time := 0.0
+var knife_inspecting := false
+var knife_attack_time := 0.0
 var bullet_holes: Array[Node3D] = []
 var message_clock := 0.0
 var bomb_position := Vector3(0, 0, -13)
@@ -248,6 +254,7 @@ func _add_weapon_model() -> void:
 	fallback_weapon_parts = [body, barrel, grip, weapon_magazine, weapon_bolt, muzzle_flash]
 	_load_ak_weapon()
 	_create_reload_magazine()
+	_create_butterfly_knife()
 
 func _load_ak_weapon() -> void:
 	# Load the supplied textured FBX. Keep the fallback visible until fitting succeeds.
@@ -362,6 +369,116 @@ func _weapon_cylinder(parent: Node3D, part_name: String, top_radius: float, bott
 	parent.add_child(part)
 	return part
 
+
+
+func _create_butterfly_knife() -> void:
+	knife_view = Node3D.new()
+	knife_view.name = "ButterflyKnife"
+	knife_view.position = Vector3(0.39, -0.34, -0.62)
+	knife_view.rotation_degrees = Vector3(-8, -10, 4)
+	camera.add_child(knife_view)
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = Color(0.72, 0.77, 0.81)
+	steel.metallic = 0.92
+	steel.roughness = 0.19
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.055, 0.067, 0.078)
+	dark.metallic = 0.82
+	dark.roughness = 0.26
+	var grip := StandardMaterial3D.new()
+	grip.albedo_color = Color(0.12, 0.14, 0.16)
+	grip.metallic = 0.48
+	grip.roughness = 0.32
+	var blade_root := Node3D.new()
+	blade_root.name = "Blade"
+	knife_view.add_child(blade_root)
+	var blade_mesh := BoxMesh.new()
+	blade_mesh.size = Vector3(0.048, 0.018, 0.40)
+	var blade := MeshInstance3D.new()
+	blade.mesh = blade_mesh
+	blade.position = Vector3(0, 0, -0.23)
+	blade.material_override = steel
+	blade_root.add_child(blade)
+	var bevel := MeshInstance3D.new()
+	var bevel_mesh := BoxMesh.new()
+	bevel_mesh.size = Vector3(0.052, 0.008, 0.32)
+	bevel.mesh = bevel_mesh
+	bevel.position = Vector3(0, -0.012, -0.20)
+	bevel.material_override = dark
+	blade_root.add_child(bevel)
+	var guard := MeshInstance3D.new()
+	var guard_mesh := BoxMesh.new()
+	guard_mesh.size = Vector3(0.12, 0.035, 0.045)
+	guard.mesh = guard_mesh
+	guard.position = Vector3(0, 0, -0.015)
+	guard.material_override = steel
+	blade_root.add_child(guard)
+	for side in [-1, 1]:
+		var pivot := Node3D.new()
+		pivot.position = Vector3(float(side) * 0.025, 0, 0.02)
+		knife_view.add_child(pivot)
+		var handle := MeshInstance3D.new()
+		var handle_mesh := BoxMesh.new()
+		handle_mesh.size = Vector3(0.052, 0.043, 0.36)
+		handle.mesh = handle_mesh
+		handle.position = Vector3(0, 0, 0.18)
+		handle.material_override = grip
+		pivot.add_child(handle)
+		var scale_panel := MeshInstance3D.new()
+		var panel_mesh := BoxMesh.new()
+		panel_mesh.size = Vector3(0.055, 0.012, 0.25)
+		scale_panel.mesh = panel_mesh
+		scale_panel.position = Vector3(0, 0.027, 0.18)
+		scale_panel.material_override = dark
+		pivot.add_child(scale_panel)
+		var pin := MeshInstance3D.new()
+		var pin_mesh := CylinderMesh.new()
+		pin_mesh.top_radius = 0.022
+		pin_mesh.bottom_radius = 0.022
+		pin_mesh.height = 0.062
+		pin.mesh = pin_mesh
+		pin.rotation.z = PI / 2.0
+		pin.material_override = steel
+		pivot.add_child(pin)
+		if side < 0: knife_left_handle = pivot
+		else: knife_right_handle = pivot
+	knife_view.visible = false
+
+func _update_butterfly_knife(delta: float) -> void:
+	if not is_instance_valid(knife_view): return
+	knife_attack_time = maxf(0.0, knife_attack_time - delta)
+	var t := Time.get_ticks_msec() * 0.001
+	knife_view.position = Vector3(0.39, -0.34 + sin(t * 2.2) * 0.006, -0.62)
+	var angle := 0.0
+	if knife_inspecting:
+		knife_inspect_time += delta
+		var p := clampf(knife_inspect_time / 1.15, 0.0, 1.0)
+		angle = PI + sin(p * PI * 5.0) * 0.5 * (1.0 - p)
+		knife_view.rotation.y = sin(p * PI * 2.0) * 0.35
+		if p >= 1.0:
+			knife_inspecting = false
+			knife_view.rotation.y = 0.0
+	elif knife_attack_time > 0.0:
+		var p := 1.0 - knife_attack_time / 0.32
+		knife_view.rotation.x = -0.85 * sin(p * PI)
+	else:
+		knife_view.rotation.x = 0.0
+	if is_instance_valid(knife_left_handle): knife_left_handle.rotation.x = angle
+	if is_instance_valid(knife_right_handle): knife_right_handle.rotation.x = -angle
+
+func _knife_attack() -> void:
+	if knife_attack_time > 0.0 or knife_inspecting: return
+	knife_attack_time = 0.32
+	var start := camera.global_position
+	var finish := start + (-camera.global_transform.basis.z * 2.2)
+	var query := PhysicsRayQueryParameters3D.create(start, finish)
+	query.exclude = [player.get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		var target: Object = hit.collider
+		if target is CharacterBody3D and target.has_method("take_damage"):
+			target.take_damage(65, player)
+			_show_message("KNIFE HIT", 0.5)
 
 func _create_reload_magazine() -> void:
 	reload_magazine = MeshInstance3D.new()
@@ -703,6 +820,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("weapon_1"): _select_weapon(0)
 	if event.is_action_pressed("weapon_2"): _select_weapon(1)
 	if event.is_action_pressed("weapon_3"): _select_weapon(2)
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_4: _select_weapon(3)
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_V and weapon == 3:
+		knife_inspecting = true
+		knife_inspect_time = 0.0
 
 func _physics_process(delta: float) -> void:
 	if match_over:
@@ -743,6 +864,11 @@ func _update_weapon(delta: float) -> void:
 	fire_clock = maxf(0, fire_clock-delta)
 	weapon_recoil = move_toward(weapon_recoil, 0.0, delta * 1.8)
 	muzzle_clock = maxf(0.0, muzzle_clock - delta)
+	if weapon == 3:
+		if is_instance_valid(weapon_view): weapon_view.visible = false
+		_update_butterfly_knife(delta)
+		return
+	if is_instance_valid(weapon_view): weapon_view.visible = true
 	if is_instance_valid(weapon_view):
 		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.006
 		weapon_view.position = Vector3(0.34, -0.28 + bob, -0.58 + weapon_recoil)
@@ -816,6 +942,9 @@ func _update_weapon(delta: float) -> void:
 				weapon_view.rotation = Vector3.ZERO
 
 func _fire() -> void:
+	if weapon == 3:
+		_knife_attack()
+		return
 	if ammo <= 0:
 		_reload()
 		return
@@ -892,7 +1021,7 @@ func _spawn_bullet_hole(point: Vector3, normal: Vector3) -> void:
 			oldest.queue_free()
 
 func _reload() -> void:
-	if reload_clock > 0 or ammo >= magazine_sizes[weapon] or reserve_ammo <= 0:
+	if weapon == 3 or reload_clock > 0 or ammo >= magazine_sizes[weapon] or reserve_ammo <= 0:
 		return
 	reload_duration = [1.8,1.3,2.5][weapon]
 	reload_clock = reload_duration
@@ -904,17 +1033,22 @@ func _reload() -> void:
 	_show_message("RELOADING...", reload_duration)
 
 func _select_weapon(index: int) -> void:
-	weapon = clampi(index,0,2)
+	weapon = clampi(index,0,3)
+	if is_instance_valid(weapon_view): weapon_view.visible = weapon != 3
+	if is_instance_valid(knife_view): knife_view.visible = weapon == 3
+	knife_inspecting = false
+	knife_attack_time = 0.0
 	if is_instance_valid(imported_weapon):
 		imported_weapon.visible = weapon == 0
-	_apply_weapon_skin(weapon)
+	if weapon < 3:
+		_apply_weapon_skin(weapon)
 	if is_instance_valid(reload_magazine):
 		reload_magazine.visible = weapon == 0 and reload_clock <= 0.0
 		for part in fallback_weapon_parts:
 			if is_instance_valid(part):
 				part.visible = weapon != 0
 	ammo = mini(ammo,magazine_sizes[weapon])
-	reserve_ammo = [90,48,20][weapon]
+	reserve_ammo = [90,48,20,0][weapon]
 	_show_message(weapon_names[weapon],1.0)
 
 func _interact() -> void:
@@ -993,7 +1127,7 @@ func _next_round() -> void:
 	bomb_clock = 35.0
 	player_health = 100
 	ammo = magazine_sizes[weapon]
-	reserve_ammo = [90,48,20][weapon]
+	reserve_ammo = [90,48,20,0][weapon]
 	player.position = Vector3(0,1.1,17)
 	for b in bots:
 		b.queue_free()
