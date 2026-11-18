@@ -42,6 +42,10 @@ var imported_magazine: Node3D
 var imported_bolt: Node3D
 var imported_magazine_home := Vector3.ZERO
 var imported_bolt_home := Vector3.ZERO
+var reload_magazine: MeshInstance3D
+var reload_magazine_home := Vector3(0.0, -0.18, -0.16)
+var dropped_magazines: Array[Node3D] = []
+var reload_magazine_spawned := false
 var fallback_weapon_parts: Array[MeshInstance3D] = []
 var reload_elapsed := 0.0
 var reload_duration := 1.8
@@ -220,6 +224,7 @@ func _add_weapon_model() -> void:
 	weapon_root.add_child(muzzle_flash)
 	fallback_weapon_parts = [body, barrel, grip, weapon_magazine, weapon_bolt, muzzle_flash]
 	_load_ak_weapon()
+	_create_reload_magazine()
 
 func _load_ak_weapon() -> void:
 	# The procedural weapon remains visible unless the imported FBX is verified.
@@ -268,6 +273,51 @@ func _load_ak_weapon() -> void:
 		if is_instance_valid(part):
 			part.visible = false
 	print("KS2: imported AKS-74 FBX with %d mesh bounds; scale %.4f" % [1, scale_factor])
+
+
+func _create_reload_magazine() -> void:
+	reload_magazine = MeshInstance3D.new()
+	reload_magazine.name = "AnimatedReloadMagazine"
+	var mag_mesh := BoxMesh.new()
+	mag_mesh.size = Vector3(0.075, 0.22, 0.105)
+	reload_magazine.mesh = mag_mesh
+	var mag_mat := StandardMaterial3D.new()
+	mag_mat.albedo_color = Color(0.075, 0.085, 0.078)
+	mag_mat.roughness = 0.72
+	reload_magazine.material_override = mag_mat
+	reload_magazine.position = reload_magazine_home
+	reload_magazine.rotation_degrees = Vector3(-8, 0, 0)
+	weapon_view.add_child(reload_magazine)
+	reload_magazine.visible = is_instance_valid(imported_weapon)
+
+func _spawn_dropped_magazine() -> void:
+	if not is_instance_valid(reload_magazine) or not is_instance_valid(camera):
+		return
+	var dropped := MeshInstance3D.new()
+	dropped.name = "DroppedMagazine"
+	dropped.mesh = reload_magazine.mesh
+	dropped.material_override = reload_magazine.material_override
+	camera.add_child(dropped)
+	dropped.transform = weapon_view.transform * reload_magazine.transform
+	dropped.position += Vector3(0.0, 0.0, -0.02)
+	dropped.set_meta("fall_velocity", Vector3(0.12, -0.15, -0.05))
+	dropped_magazines.append(dropped)
+
+func _update_dropped_magazines(delta: float) -> void:
+	for i in range(dropped_magazines.size() - 1, -1, -1):
+		var mag := dropped_magazines[i]
+		if not is_instance_valid(mag):
+			dropped_magazines.remove_at(i)
+			continue
+		var velocity: Vector3 = mag.get_meta("fall_velocity", Vector3.ZERO)
+		velocity.y -= 2.8 * delta
+		mag.set_meta("fall_velocity", velocity)
+		mag.position += velocity * delta
+		mag.rotation.x += 1.8 * delta
+		mag.rotation.z += 2.2 * delta
+		if mag.position.y < -1.35:
+			mag.queue_free()
+			dropped_magazines.remove_at(i)
 
 func _find_weapon_part(node: Node, name_hints: Array[String]) -> Node3D:
 	for child in node.get_children():
@@ -364,6 +414,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_update_player(delta)
 	_update_weapon(delta)
+	_update_dropped_magazines(delta)
 	_update_objective(delta)
 	_update_hud()
 	if message_clock > 0:
@@ -410,9 +461,19 @@ func _update_weapon(delta: float) -> void:
 			weapon_view.position.x += 0.12 * dip
 			weapon_view.rotation.z = -0.58 * dip
 			weapon_view.rotation.x = 0.24 * dip
-			var mag_drop := clampf((progress - 0.20) / 0.12, 0.0, 1.0)
-			var mag_insert := clampf((progress - 0.55) / 0.13, 0.0, 1.0)
+			var mag_drop := clampf((progress - 0.18) / 0.18, 0.0, 1.0)
+			var mag_insert := clampf((progress - 0.43) / 0.18, 0.0, 1.0)
 			var magazine_out := mag_drop * (1.0 - mag_insert)
+			if progress >= 0.36 and not reload_magazine_spawned:
+				_spawn_dropped_magazine()
+				reload_magazine_spawned = true
+			if is_instance_valid(reload_magazine):
+				reload_magazine.visible = progress < 0.36 or progress >= 0.43
+				if progress < 0.36:
+					reload_magazine.position = reload_magazine_home + Vector3(0.0, -0.34 * clampf((progress - 0.18) / 0.18, 0.0, 1.0), 0.015)
+				elif progress >= 0.43:
+					var fresh_t := clampf((progress - 0.43) / 0.18, 0.0, 1.0)
+					reload_magazine.position = reload_magazine_home + Vector3(0.0, -0.42 * (1.0 - fresh_t), 0.015 * (1.0 - fresh_t))
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position.y = -0.18 - 0.28 * magazine_out
 			if is_instance_valid(imported_magazine):
@@ -425,6 +486,9 @@ func _update_weapon(delta: float) -> void:
 		else:
 			if is_instance_valid(weapon_magazine):
 				weapon_magazine.position = Vector3(0, -0.18, -0.12)
+			if is_instance_valid(reload_magazine):
+				reload_magazine.position = reload_magazine_home
+				reload_magazine.visible = is_instance_valid(imported_weapon)
 			if is_instance_valid(weapon_bolt):
 				weapon_bolt.position.z = -0.23
 			if is_instance_valid(imported_magazine):
@@ -532,12 +596,18 @@ func _reload() -> void:
 	reload_duration = [1.8,1.3,2.5][weapon]
 	reload_clock = reload_duration
 	reload_elapsed = 0.0
+	reload_magazine_spawned = false
+	if is_instance_valid(reload_magazine):
+		reload_magazine.position = reload_magazine_home
+		reload_magazine.visible = is_instance_valid(imported_weapon)
 	_show_message("RELOADING...", reload_duration)
 
 func _select_weapon(index: int) -> void:
 	weapon = clampi(index,0,2)
 	if is_instance_valid(imported_weapon):
 		imported_weapon.visible = weapon == 0
+	if is_instance_valid(reload_magazine):
+		reload_magazine.visible = weapon == 0 and reload_clock <= 0.0
 		for part in fallback_weapon_parts:
 			if is_instance_valid(part):
 				part.visible = weapon != 0
