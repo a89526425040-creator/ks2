@@ -227,52 +227,88 @@ func _add_weapon_model() -> void:
 	_create_reload_magazine()
 
 func _load_ak_weapon() -> void:
-	# The procedural weapon remains visible unless the imported FBX is verified.
-	var weapon_resource: Resource = ResourceLoader.load("res://896cdfacb60948bd89918a152d25c658.fbx")
-	if not (weapon_resource is PackedScene):
-		push_warning("KS2: AK FBX did not import as a PackedScene; keeping fallback weapon.")
-		return
-	var instance: Node = (weapon_resource as PackedScene).instantiate()
-	if not (instance is Node3D):
-		instance.free()
-		push_warning("KS2: AK FBX root is not Node3D; keeping fallback weapon.")
-		return
-	imported_weapon = instance as Node3D
-	imported_weapon.name = "ImportedAKS74"
+	# Build a clean AK-style first-person weapon from separate parts.
+	# The imported FBX is intentionally not used here: its stock contains
+	# an unwanted protruding rod which is part of the source geometry.
+	imported_weapon = Node3D.new()
+	imported_weapon.name = "CleanAKS74"
 	weapon_view.add_child(imported_weapon)
-	imported_magazine = _find_weapon_part(imported_weapon, ["mag", "magazine"])
-	imported_bolt = _find_weapon_part(imported_weapon, ["bolt", "charging", "handle"])
-	if is_instance_valid(imported_magazine):
-		imported_magazine_home = imported_magazine.position
-	if is_instance_valid(imported_bolt):
-		imported_bolt_home = imported_bolt.position
-	var bounds := _collect_weapon_bounds(imported_weapon, imported_weapon)
-	if bounds.size.length() < 0.001:
-		imported_weapon.queue_free()
-		imported_weapon = null
-		push_warning("KS2: AK FBX contains no visible mesh; keeping fallback weapon.")
-		return
-	# Align the longest model axis with the barrel direction (-Z).
-	var dimensions := bounds.size
-	var longest_axis := 2
-	if dimensions.x >= dimensions.y and dimensions.x >= dimensions.z:
-		longest_axis = 0
-	elif dimensions.y >= dimensions.x and dimensions.y >= dimensions.z:
-		longest_axis = 1
-	imported_weapon.rotation = Vector3.ZERO
-	if longest_axis == 0:
-		imported_weapon.rotation.y = PI * 0.5
-	elif longest_axis == 1:
-		imported_weapon.rotation.x = PI * 0.5
-	var scale_factor := 0.98 / maxf(dimensions.x, maxf(dimensions.y, dimensions.z))
-	imported_weapon.scale = Vector3.ONE * scale_factor
-	var rotated_bounds: AABB = bounds * Transform3D(imported_weapon.basis, Vector3.ZERO)
-	imported_weapon.position = Vector3(0.0, 0.0, -0.52) - imported_weapon.basis * bounds.get_center() * scale_factor
-	# Hide the primitive only after the FBX has passed the mesh check.
+	var dark := _weapon_material(Color(0.105, 0.115, 0.11), 0.38)
+	var metal := _weapon_material(Color(0.19, 0.205, 0.19), 0.32)
+	var wood := _weapon_material(Color(0.30, 0.19, 0.105), 0.72)
+	var black := _weapon_material(Color(0.045, 0.05, 0.047), 0.3)
+
+	# Receiver and upper cover.
+	_weapon_box(imported_weapon, "Receiver", Vector3(0.17, 0.17, 0.48), Vector3(0, 0, 0.02), dark)
+	_weapon_box(imported_weapon, "Top cover", Vector3(0.145, 0.045, 0.40), Vector3(0, 0.105, 0.015), metal)
+	_weapon_box(imported_weapon, "Rear receiver block", Vector3(0.16, 0.15, 0.13), Vector3(0, 0.015, 0.29), dark)
+
+	# Wooden handguard and the barrel assembly.
+	_weapon_box(imported_weapon, "Lower handguard", Vector3(0.155, 0.125, 0.34), Vector3(0, -0.005, -0.385), wood)
+	_weapon_box(imported_weapon, "Upper handguard", Vector3(0.12, 0.075, 0.34), Vector3(0, 0.105, -0.385), wood)
+	_weapon_cylinder(imported_weapon, "Barrel", 0.027, 0.027, 0.58, Vector3(0, 0.015, -0.82), metal)
+	_weapon_cylinder(imported_weapon, "Muzzle brake", 0.043, 0.038, 0.13, Vector3(0, 0.015, -1.16), black)
+	_weapon_cylinder(imported_weapon, "Gas tube", 0.025, 0.025, 0.34, Vector3(0, 0.145, -0.55), dark)
+
+	# Solid wooden buttstock: no thin rod or brace behind the stock.
+	_weapon_box(imported_weapon, "Wooden buttstock", Vector3(0.13, 0.19, 0.43), Vector3(0, 0.005, 0.47), wood)
+	_weapon_box(imported_weapon, "Rubber butt plate", Vector3(0.14, 0.205, 0.035), Vector3(0, 0.005, 0.70), black)
+
+	# Pistol grip and curved-looking detachable magazine.
+	var grip := _weapon_box(imported_weapon, "Pistol grip", Vector3(0.105, 0.24, 0.13), Vector3(0, -0.19, 0.12), black)
+	grip.rotation.x = -0.18
+	imported_magazine = _weapon_box(imported_weapon, "Magazine", Vector3(0.115, 0.285, 0.16), Vector3(0, -0.205, -0.075), black)
+	imported_magazine_home = imported_magazine.position
+	_weapon_box(imported_weapon, "Magazine base", Vector3(0.12, 0.025, 0.17), Vector3(0, -0.355, -0.075), metal)
+
+	# Sights, gas block, front block, charging handle and small details.
+	_weapon_box(imported_weapon, "Rear sight base", Vector3(0.075, 0.09, 0.075), Vector3(0, 0.17, -0.18), dark)
+	_weapon_box(imported_weapon, "Rear sight leaf", Vector3(0.035, 0.018, 0.12), Vector3(0, 0.22, -0.18), metal)
+	_weapon_box(imported_weapon, "Front sight block", Vector3(0.085, 0.12, 0.075), Vector3(0, 0.06, -0.99), dark)
+	_weapon_box(imported_weapon, "Front sight post", Vector3(0.018, 0.09, 0.018), Vector3(0, 0.16, -0.99), black)
+	imported_bolt = _weapon_box(imported_weapon, "Charging handle", Vector3(0.07, 0.045, 0.13), Vector3(0.105, 0.105, -0.02), metal)
+	imported_bolt_home = imported_bolt.position
+	_weapon_box(imported_weapon, "Selector", Vector3(0.018, 0.10, 0.13), Vector3(0.095, -0.015, 0.13), metal)
+
+	# Keep the existing muzzle flash and hide the old primitive placeholder.
 	for part in fallback_weapon_parts:
 		if is_instance_valid(part):
 			part.visible = false
-	print("KS2: imported AKS-74 FBX with %d mesh bounds; scale %.4f" % [1, scale_factor])
+	print("KS2: clean procedural AKS-74 assembled; stock rod removed")
+
+
+func _weapon_material(color: Color, roughness: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	return material
+
+
+func _weapon_box(parent: Node3D, part_name: String, dimensions: Vector3, at: Vector3, material: Material) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	part.mesh = mesh
+	part.position = at
+	part.material_override = material
+	parent.add_child(part)
+	return part
+
+
+func _weapon_cylinder(parent: Node3D, part_name: String, top_radius: float, bottom_radius: float, length: float, at: Vector3, material: Material) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.name = part_name
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = top_radius
+	mesh.bottom_radius = bottom_radius
+	mesh.height = length
+	part.mesh = mesh
+	part.rotation.x = PI * 0.5
+	part.position = at
+	part.material_override = material
+	parent.add_child(part)
+	return part
 
 
 func _create_reload_magazine() -> void:
