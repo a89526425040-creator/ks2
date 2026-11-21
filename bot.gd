@@ -76,15 +76,17 @@ func _build_soldier() -> void:
 	_capsule(visual, "Helmet", 0.19, 0.22, Vector3(0, 1.08, 0.015), dark_material)
 	_box(visual, "HelmetBand", Vector3(0.30, 0.035, 0.27), Vector3(0, 1.06, -0.01), team_mat)
 	left_arm = Node3D.new()
-	left_arm.position = Vector3(-0.34, 0.55, -0.015)
+	left_arm.position = Vector3(-0.25, 0.43, -0.22)
 	visual.add_child(left_arm)
-	_capsule(left_arm, "LeftSleeve", 0.105, 0.58, Vector3(0, -0.22, 0), cloth_material).rotation.z = -0.24
-	_capsule(left_arm, "LeftGlove", 0.075, 0.18, Vector3(0, -0.48, -0.015), dark_material)
+	var left_sleeve := _capsule(left_arm, "LeftSleeve", 0.095, 0.58, Vector3(0, -0.015, 0), cloth_material)
+	left_sleeve.rotation = Vector3(PI * 0.5, 0, -0.18)
+	_capsule(left_arm, "LeftGlove", 0.075, 0.16, Vector3(0, -0.015, -0.27), dark_material).rotation.x = PI * 0.5
 	right_arm = Node3D.new()
-	right_arm.position = Vector3(0.34, 0.55, -0.015)
+	right_arm.position = Vector3(0.25, 0.43, -0.22)
 	visual.add_child(right_arm)
-	_capsule(right_arm, "RightSleeve", 0.105, 0.58, Vector3(0, -0.22, 0), cloth_material).rotation.z = 0.24
-	_capsule(right_arm, "RightGlove", 0.075, 0.18, Vector3(0, -0.48, -0.015), dark_material)
+	var right_sleeve := _capsule(right_arm, "RightSleeve", 0.095, 0.58, Vector3(0, -0.015, 0), cloth_material)
+	right_sleeve.rotation = Vector3(PI * 0.5, 0, 0.18)
+	_capsule(right_arm, "RightGlove", 0.075, 0.16, Vector3(0, -0.015, -0.27), dark_material).rotation.x = PI * 0.5
 	left_leg = Node3D.new()
 	left_leg.position = Vector3(-0.16, -0.10, 0)
 	visual.add_child(left_leg)
