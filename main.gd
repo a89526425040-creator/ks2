@@ -35,6 +35,10 @@ var mouse_captured := false
 var player_speed := 7.2
 var player_velocity := Vector3.ZERO
 var weapon_view: Node3D
+var player_arms: Node3D
+var left_view_arm: Node3D
+var right_view_arm: Node3D
+var player_fire_kick := 0.0
 var weapon_magazine: MeshInstance3D
 var weapon_bolt: MeshInstance3D
 var imported_weapon: Node3D
@@ -261,6 +265,7 @@ func _add_weapon_model() -> void:
 	_load_ak_weapon()
 	_create_reload_magazine()
 	_create_butterfly_knife()
+	_create_player_arms()
 
 func _load_ak_weapon() -> void:
 	# Load the supplied textured FBX. Keep the fallback visible until fitting succeeds.
@@ -375,6 +380,55 @@ func _weapon_cylinder(parent: Node3D, part_name: String, top_radius: float, bott
 	parent.add_child(part)
 	return part
 
+
+
+func _create_player_arms() -> void:
+	player_arms = Node3D.new()
+	player_arms.name = "FirstPersonArms"
+	camera.add_child(player_arms)
+	var sleeve := StandardMaterial3D.new()
+	sleeve.albedo_color = Color(0.12, 0.15, 0.13)
+	sleeve.roughness = 0.86
+	var glove := StandardMaterial3D.new()
+	glove.albedo_color = Color(0.055, 0.062, 0.055)
+	glove.roughness = 0.68
+	for side in [-1, 1]:
+		var pivot := Node3D.new()
+		pivot.name = "LeftArmPivot" if side < 0 else "RightArmPivot"
+		pivot.position = Vector3(-0.18, -0.43, -0.36) if side < 0 else Vector3(0.39, -0.42, -0.34)
+		player_arms.add_child(pivot)
+		var forearm := MeshInstance3D.new()
+		var forearm_mesh := CapsuleMesh.new()
+		forearm_mesh.radius = 0.082
+		forearm_mesh.height = 0.58
+		forearm.mesh = forearm_mesh
+		forearm.rotation.x = PI * 0.5
+		forearm.rotation.z = -0.20 if side < 0 else 0.22
+		forearm.position = Vector3(0, -0.015, 0.10)
+		forearm.material_override = sleeve
+		pivot.add_child(forearm)
+		var cuff := MeshInstance3D.new()
+		var cuff_mesh := CylinderMesh.new()
+		cuff_mesh.top_radius = 0.085
+		cuff_mesh.bottom_radius = 0.085
+		cuff_mesh.height = 0.075
+		cuff.mesh = cuff_mesh
+		cuff.rotation.x = PI * 0.5
+		cuff.position = Vector3(0, -0.015, -0.13)
+		cuff.material_override = glove
+		pivot.add_child(cuff)
+		var hand := MeshInstance3D.new()
+		var hand_mesh := SphereMesh.new()
+		hand_mesh.radius = 0.085
+		hand_mesh.height = 0.15
+		hand.mesh = hand_mesh
+		hand.position = Vector3(0, -0.015, -0.19)
+		hand.material_override = glove
+		pivot.add_child(hand)
+		if side < 0:
+			left_view_arm = pivot
+		else:
+			right_view_arm = pivot
 
 
 func _create_butterfly_knife() -> void:
@@ -961,16 +1015,22 @@ func _update_player(delta: float) -> void:
 func _update_weapon(delta: float) -> void:
 	fire_clock = maxf(0, fire_clock-delta)
 	weapon_recoil = move_toward(weapon_recoil, 0.0, delta * 1.8)
+	player_fire_kick = move_toward(player_fire_kick, 0.0, delta * 5.5)
 	muzzle_clock = maxf(0.0, muzzle_clock - delta)
 	if weapon == 3:
+		if is_instance_valid(player_arms): player_arms.visible = false
 		if is_instance_valid(weapon_view): weapon_view.visible = false
 		_update_butterfly_knife(delta)
 		return
 	if is_instance_valid(weapon_view): weapon_view.visible = true
 	if is_instance_valid(weapon_view):
 		var bob := sin(Time.get_ticks_msec() * 0.012) * 0.006
-		weapon_view.position = Vector3(0.34, -0.28 + bob, -0.58 + weapon_recoil)
-		weapon_view.rotation = Vector3.ZERO
+		weapon_view.position = Vector3(0.34, -0.28 + bob - player_fire_kick * 0.035, -0.58 + weapon_recoil)
+		weapon_view.rotation = Vector3(-player_fire_kick * 0.12, 0.0, player_fire_kick * 0.035)
+		if is_instance_valid(player_arms):
+			player_arms.visible = true
+		if is_instance_valid(left_view_arm): left_view_arm.rotation.x = -player_fire_kick * 0.10
+		if is_instance_valid(right_view_arm): right_view_arm.rotation.x = -player_fire_kick * 0.16
 		if reload_clock > 0.0:
 			reload_elapsed += delta
 			var progress := clampf(reload_elapsed / maxf(reload_duration, 0.01), 0.0, 1.0)
@@ -1048,6 +1108,7 @@ func _fire() -> void:
 		return
 	ammo -= 1
 	fire_clock = fire_delays[weapon]
+	player_fire_kick = 1.0
 	weapon_recoil = minf(weapon_recoil + [0.075, 0.045, 0.14][weapon], 0.22)
 	muzzle_clock = 0.055
 	var from := camera.global_position
@@ -1133,6 +1194,7 @@ func _reload() -> void:
 func _select_weapon(index: int) -> void:
 	weapon = clampi(index,0,3)
 	if is_instance_valid(weapon_view): weapon_view.visible = weapon != 3
+	if is_instance_valid(player_arms): player_arms.visible = weapon != 3
 	if is_instance_valid(knife_view): knife_view.visible = weapon == 3
 	knife_inspecting = false
 	knife_attack_time = 0.0
